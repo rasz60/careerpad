@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#fbfaf8" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171c" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <!-- 포털 앱 전환 버튼은 로그인한 주인에게만 머리말(Layout)에 직접 그린다. 자동으로 떠 있는 버튼을 붙이지 않게 -->
+    <meta name="aep-switcher" content="manual" />
+    <title>커리어++</title>
+    <!-- 첫 화면 로딩: ae:p 포털의 로딩 화면(ae2p shared/loader.ts)과 같은 모양. 포털에서 넘어올 때 화면이 끊기지 않게 -->
+    <style>.aep-ld { position: fixed; inset: 0; z-index: 2147483646; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; background: #f6f5fb; color: #7b7f95; font: 14px/1.4 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; letter-spacing: .02em; animation: aep-ld-in .2s ease-out both; --px-ink: #1e1e1e; } .aep-ld p { margin: 0; } .aep-ld-logo { width: 92px; height: 92px; border-radius: 50%; display: grid; place-items: center; box-shadow: 0 14px 34px -14px rgb(90 80 200 / .45); animation: aep-ld-pop .45s cubic-bezier(.2, 1.4, .4, 1) both; } .aep-ld-logo svg { width: var(--logo); height: auto; display: block; } .aep-ld-work { background: #efe9ff; } .aep-ld-project { background: #e3eeff; } .aep-ld-health { background: #e0f5ea; } .aep-ld-interest { background: #fdeae2; } .aep-ld-ae { width: 58px; height: auto; overflow: visible; } .aep-ld-ae path { transform-box: fill-box; transform-origin: center bottom; animation: aep-ld-hop .9s ease-in-out infinite; } .aep-ld-ae .e { animation-delay: .18s; } .aep-ld-solo .aep-ld-ae { width: 96px; } @keyframes aep-ld-in { from { opacity: 0; } } @keyframes aep-ld-pop { from { transform: scale(.6); opacity: 0; } } @keyframes aep-ld-hop { 0%, 60%, 100% { transform: translateY(0) scale(1, 1); } 20% { transform: translateY(-16px) scale(.96, 1.04); } 45% { transform: translateY(0) scale(1.06, .92); } } @media (prefers-color-scheme: dark) { .aep-ld { background: #14152a; color: #9a9cb8; --px-ink: #a7b6bd; } .aep-ld-work { background: #2d2652; } .aep-ld-project { background: #1d2f55; } .aep-ld-health { background: #183a2b; } .aep-ld-interest { background: #43281f; } } @media (prefers-reduced-motion: reduce) { .aep-ld, .aep-ld-logo, .aep-ld-ae path { animation: none; } }</style>
+  </head>
+  <body>
+    <div id="root"><div class="aep-ld" role="status" aria-label="커리어++ 여는 중"><div class="aep-ld-logo aep-ld-interest" style="--logo:60%"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="2.5" width="16" height="19" rx="2.5" fill="#fff" stroke="#f07a4e" stroke-width="1.8"/><circle cx="9" cy="8.5" r="2.3" fill="#f07a4e"/><path d="M7.5 14.5h9M7.5 17.5h5.5M14 8.5h3.6M15.8 6.7v3.6" fill="none" stroke="#f07a4e" stroke-width="1.7" stroke-linecap="round"/></svg></div><svg class="aep-ld-ae" viewBox="4 4 200 112" aria-hidden="true"><defs><linearGradient id="aep-ld-grad" gradientUnits="userSpaceOnUse" x1="8" y1="40" x2="200" y2="90"><stop offset="0" stop-color="#4E8BFF"/><stop offset=".5" stop-color="#7A82FF"/><stop offset="1" stop-color="#D47CF2"/></linearGradient></defs><g fill="none" stroke="url(#aep-ld-grad)" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"><path class="a" d="M24 60a36 36 0 1 0 72 0a36 36 0 1 0 -72 0M96 42V96"/><path class="e" d="M111 60H183A36 36 0 1 0 163.9 91.79"/></g></svg><p>커리어++ 여는 중…</p></div></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

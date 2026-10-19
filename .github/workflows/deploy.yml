@@ -1,0 +1,51 @@
+# main 에 push 하면 검사(Go vet·test, 웹 타입체크)를 돌리고, 통과하면 ae:p Oracle 서버에 SSH 로 접속해 scripts/deploy.sh 를 실행한다.
+#
+# 필요한 저장소 Secrets (Settings → Secrets and variables → Actions):
+#   DEPLOY_HOST         서버 주소 (ae2p.duckdns.org)
+#   DEPLOY_USER         SSH 사용자 (ubuntu)
+#   DEPLOY_SSH_KEY      배포 전용 개인키. 서버 authorized_keys 에는 command= 로 이 저장소의 deploy.sh 만 실행되게 묶는다
+#   DEPLOY_KNOWN_HOSTS  `ssh-keyscan -t ed25519 <서버주소>` 출력 (서버 위장 방지)
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-careerpad
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - run: go vet ./... && go test ./...
+        working-directory: backend
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --no-audit --no-fund && npx tsc -p .
+        working-directory: web
+
+  deploy:
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: SSH 키 준비
+        run: |
+          install -m 700 -d ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          echo "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+      - name: 서버에서 deploy.sh 실행
+        # 서버의 authorized_keys 가 command= 로 deploy.sh 를 강제하므로 원격 명령은 보내지 않는다
+        run: ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}"
