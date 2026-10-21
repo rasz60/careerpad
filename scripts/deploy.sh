@@ -116,10 +116,18 @@ for _ in $(seq 1 15); do
   sleep 2
 done
 
-echo "!! 새 버전이 30초 안에 응답하지 않아 이전 버전으로 되돌립니다 (pm2 logs careerpad-api 확인)" >&2
+echo "!! 새 버전이 30초 안에 /healthz(포트 $PORT)에 응답하지 않습니다." >&2
+# 시작하자마자 죽은 이유(설정 누락 · DB 접속 실패 등)만 골라 보여 준다. 공개 저장소 로그에 남으므로 DB 사용자 이름은 가린다
+REASON="$(pm2 logs careerpad-api --lines 60 --nostream --raw 2>/dev/null   | grep -E '"server exited"|panic:|address already in use' | tail -3   | sed -E 's/postgres\.[A-Za-z0-9]+/postgres.***/g' | cut -c1-500 || true)"
+echo "── 시작 실패 이유 (자세히: 서버에서 pm2 logs careerpad-api) ──" >&2
+echo "${REASON:-(로그에서 찾지 못함)}" >&2
+
 if [ -f backend/bin/careerpad-api.prev ]; then
   mv backend/bin/careerpad-api.prev backend/bin/careerpad-api
   if [ -d web/dist.prev ]; then rm -rf web/dist && mv web/dist.prev web/dist; fi
   pm2 startOrReload ecosystem.config.cjs --update-env
+  echo "!! 이전 버전으로 되돌렸습니다." >&2
+else
+  echo "!! 되돌릴 이전 버전이 없습니다(첫 배포). 원인을 고친 뒤 서버에서 bash scripts/deploy.sh 로 다시 띄우세요." >&2
 fi
 exit 1
