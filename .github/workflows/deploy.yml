@@ -1,10 +1,16 @@
-# main 에 push 하면 검사(Go vet·test, 웹 타입체크)를 돌리고, 통과하면 ae:p Oracle 서버에 SSH 로 접속해 scripts/deploy.sh 를 실행한다.
+# main 에 push 하면 검사(Go vet·test, 웹 타입체크)를 돌리고, 통과하면 여기(러너)에서 빌드해 ae:p Oracle 서버로 보낸다.
+# 서버(메모리 1GB)에서는 빌드하지 않는다 — 운동기록 빌드가 서버를 멈춘 뒤 같은 구조로 바꿨다 (scripts/deploy.sh 머리말).
+# 빌드 묶음(tar.gz)을 ssh 표준입력으로 흘려보내면, 서버의 authorized_keys command= 가 scripts/deploy.sh 로 받아 바꿔 끼운다.
 #
 # 필요한 저장소 Secrets (Settings → Secrets and variables → Actions):
 #   DEPLOY_HOST         서버 주소 (ae2p.duckdns.org)
 #   DEPLOY_USER         SSH 사용자 (ubuntu)
 #   DEPLOY_SSH_KEY      배포 전용 개인키. 서버 authorized_keys 에는 command= 로 이 저장소의 deploy.sh 만 실행되게 묶는다
 #   DEPLOY_KNOWN_HOSTS  `ssh-keyscan -t ed25519 <서버주소>` 출력 (서버 위장 방지)
+#
+# 필요한 저장소 Variables (같은 화면의 Variables 탭) — 웹 빌드에 그대로 들어가는 공개 값:
+#   VITE_SUPABASE_URL       ae:p 공용 Supabase 주소 (포털과 같은 값)
+#   VITE_SUPABASE_ANON_KEY  anon 키 (브라우저에 공개되는 키. service_role 키 금지)
 name: deploy
 
 on:
@@ -40,12 +46,50 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Go 백엔드 빌드 (서버 아키텍처 amd64 · arm64 둘 다, 서버가 맞는 것을 고른다)
+        working-directory: backend
+        run: |
+          for arch in amd64 arm64; do
+            CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -trimpath -ldflags="-s -w" -o "$GITHUB_WORKSPACE/bundle/bin/careerpad-api-linux-$arch" ./cmd/api
+          done
+
+      - name: 웹 빌드 (/career/)
+        working-directory: web
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$VITE_SUPABASE_URL" ] || [ -z "$VITE_SUPABASE_ANON_KEY" ]; then
+            echo "::error::저장소 Variables 에 VITE_SUPABASE_URL · VITE_SUPABASE_ANON_KEY 를 넣어 주세요"
+            exit 1
+          fi
+          npm ci --no-audit --no-fund
+          npx vite build --outDir "$GITHUB_WORKSPACE/bundle/web" --emptyOutDir
+
+      - name: 묶음 정리
+        run: |
+          echo "$GITHUB_SHA" > bundle/COMMIT
+          du -sh bundle bundle/bin/* bundle/web
+
       - name: SSH 키 준비
         run: |
           install -m 700 -d ~/.ssh
           echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           echo "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
-      - name: 서버에서 deploy.sh 실행
-        # 서버의 authorized_keys 가 command= 로 deploy.sh 를 강제하므로 원격 명령은 보내지 않는다
-        run: ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}"
+
+      - name: 서버로 보내 바꿔 끼우기
+        # 서버의 authorized_keys 가 command= 로 deploy.sh 를 강제하므로 원격 명령은 보내지 않는다. 묶음은 표준입력으로 간다
+        run: |
+          tar -czf - -C bundle . | ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes             -o ServerAliveInterval=15 -o ServerAliveCountMax=4 "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}"

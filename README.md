@@ -70,31 +70,41 @@ careerpad/
 
 ## 개발
 
-```bash
-# 1회 준비
-cp .env.example .env              # SUPABASE_URL, DATABASE_URL(풀러) …
-cp web/.env.example web/.env      # VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY (포털과 같은 값)
-(cd web && npm install)
+```powershell
+# 1회 준비 (PowerShell)
+Copy-Item .env.example .env               # SUPABASE_URL, DATABASE_URL(풀러) …
+Copy-Item web\.env.example web\.env       # VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY (포털과 같은 값)
+cd web; npm install; cd ..
 
-# 백엔드 (http://127.0.0.1:8092)
-cd backend && set -a && . ../.env && set +a && go run ./cmd/api
-# 웹 (http://localhost:5173/career/) — /api/career 는 vite 가 8092 로 넘긴다
-cd web && npm run dev
+# 터미널 1 — 백엔드 (http://127.0.0.1:8092)
+. .\scripts\load-env.ps1                  # 앞의 점(.) 필수. backend 폴더에서는 . ..\scripts\load-env.ps1
+cd backend; go run ./cmd/api
+
+# 터미널 2 — 웹 (http://localhost:5173/career/) — /api/career 는 vite 가 8092 로 넘긴다
+cd web; npm run dev
 
 # 검사
-cd backend && go vet ./... && go test ./...
-cd web && npm run typecheck
+cd backend; go vet ./...; go test ./...
+cd web; npm run typecheck
 ```
+
+bash(서버 · Git Bash)에서는 `set -a; . ./.env; set +a` 로 환경변수를 올린 뒤 `cd backend && go run ./cmd/api`.
 
 개발 서버에는 포털이 없어서 `/career/` 에서 같은 ae:p 계정으로 바로 로그인합니다 (배포본은 포털 로그인).
 
 ## 배포 (ae:p Oracle 서버, 운동기록과 같은 방식)
 
+**서버에서는 빌드하지 않습니다.** 서버(메모리 1GB)에서 운동기록을 빌드하다 서버가 멈춘 뒤로, Go 바이너리(linux amd64 · arm64)와 웹은
+GitHub Actions 러너가 만들고, 묶음(tar.gz)을 SSH 표준입력으로 보내면 서버의 [scripts/deploy.sh](scripts/deploy.sh) 가 받아서
+코드를 빌드 커밋에 맞추고 → 서버 아키텍처에 맞는 바이너리 · 웹을 바꿔 끼우고 → pm2 재시작 → `/healthz` 확인 (30초 안에 응답이 없으면 이전 버전으로 되돌림).
+`deploy.sh` 는 전체 10분 제한(`DEPLOY_TIMEOUT`) · 동시 배포 잠금이 있습니다. 서버에 Go 는 필요 없습니다.
+
 1. **DB**: Supabase SQL Editor 에서 [backend/migrations/0001_career_schema.sql](backend/migrations/0001_career_schema.sql) 실행
-2. **서버에 받기**: `git clone git@github-careerpad:rasz60/careerpad.git ~/careerpad` (읽기 전용 Deploy key)
-3. **`.env`**: 루트 `.env`(백엔드) · `web/.env`(웹) — 각 `.env.example` 참고
-4. **첫 배포**: `bash ~/careerpad/scripts/deploy.sh && pm2 save`
-5. **Caddy**: 포털 저장소 `deploy/Caddyfile` 의 `/career/` · `/api/career/` 블록 반영 → `sudo systemctl reload caddy`
-6. **자동 배포**: `main` 에 push → Go vet · test, 웹 타입체크 → 서버에서 `scripts/deploy.sh`.
-   Secrets(`DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS`)는 운동기록 README 와 같은 방법으로
-   **이 저장소 전용 키**를 만들어 넣습니다 (`command="bash $HOME/careerpad/scripts/deploy.sh",…`)
+2. **서버에 받기**: `git clone git@github-careerpad:rasz60/careerpad.git ~/careerpad` (읽기 전용 Deploy key. 공개 저장소면 https 로 받아도 된다)
+3. **`.env`**: 루트 `.env`(백엔드)만. 웹 값은 서버가 아니라 GitHub 저장소 **Variables** 에 `VITE_SUPABASE_URL` · `VITE_SUPABASE_ANON_KEY`
+4. **Caddy**: 포털 저장소 `deploy/Caddyfile` 의 `/career/` · `/api/career/` 블록 반영 → `sudo systemctl reload caddy`
+5. **자동 배포**: Secrets(`DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS`)는 운동기록과 같은 방법으로
+   **이 저장소 전용 키**를 만들어 넣습니다 (`command="bash $HOME/careerpad/scripts/deploy.sh",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty …`)
+6. **첫 배포**: GitHub → Actions → deploy → **Run workflow** (이후로는 `main` 에 push 하면 자동)
+
+운영: `.env` 를 바꾼 뒤에는 서버에서 `bash ~/careerpad/scripts/deploy.sh` (빌드 없이 pm2 만 다시 띄운다). 로그는 `pm2 logs careerpad-api`.
