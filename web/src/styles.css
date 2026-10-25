@@ -6,13 +6,16 @@
   --surface-2: #f4f2ee;
   --line: #e7e3dc;
   --text: #22232a;
-  --muted: #74767f;
+  --muted: #66686f;
+  /* 주황은 셋으로 나눠 쓴다: accent = 밑줄 · 테두리 · 토글 같은 장식, -text = 글자(5.3:1), -strong = 흰 글자를 올리는 버튼(4.8:1) */
   --accent: #e2643a;
+  --accent-text: #b9471f;
+  --accent-strong: #c24c26;
   --accent-ink: #ffffff;
   --accent-soft: #fdeae2;
-  --ok: #2f8f5b;
+  --ok: #1f7a48;
   --ok-soft: #e1f3e8;
-  --warn: #b5541c;
+  --warn: #9c4512;
   --warn-soft: #fdecdf;
   --danger: #c63b4f;
   --focus: #e2643a;
@@ -31,6 +34,8 @@
     --text: #ecebf0;
     --muted: #9a9ba8;
     --accent: #ff8a5c;
+    --accent-text: #ff8a5c;
+    --accent-strong: #ff8a5c;
     --accent-ink: #1b1209;
     --accent-soft: #43281f;
     --ok: #74d39f;
@@ -80,7 +85,7 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .btn:active:not(:disabled) { transform: translateY(1px); }
 .btn:disabled { opacity: .5; cursor: default; }
 .btn.small { height: 32px; padding: 0 12px; font-size: 13px; border-radius: 8px; }
-.btn.primary { background: var(--accent); color: var(--accent-ink); }
+.btn.primary { background: var(--accent-strong); color: var(--accent-ink); }
 .btn.primary:hover:not(:disabled) { filter: brightness(1.05); }
 .btn.ghost { background: var(--surface); border-color: var(--line); }
 .btn.ghost:hover:not(:disabled) { background: var(--surface-2); }
@@ -95,7 +100,7 @@ button, input, textarea, select { font: inherit; color: inherit; }
 
 .badge {
   display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 99px;
-  font-size: 12px; font-weight: 600; background: var(--accent-soft); color: var(--accent); white-space: nowrap;
+  font-size: 12px; font-weight: 600; background: var(--accent-soft); color: var(--accent-text); white-space: nowrap;
 }
 .badge.ok { background: var(--ok-soft); color: var(--ok); }
 .badge.warn { background: var(--warn-soft); color: var(--warn); }
@@ -142,17 +147,20 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); }
 
 /* ── about me (이력서) ─────────────────── */
-.resume-head { display: flex; gap: 24px; align-items: center; padding-bottom: 28px; border-bottom: 1px solid var(--line); }
-.resume-photo { width: 112px; height: 140px; border-radius: 10px; object-fit: cover; flex: none; background: var(--surface-2); }
-.resume-head h1 { font-size: 32px; line-height: 1.25; letter-spacing: -.01em; }
-.headline { margin-top: 4px; font-size: 17px; color: var(--muted); }
+/* 이력서 머리: 이 앱에서 힘을 주는 곳. 이름은 크고 촘촘하게, 아래 굵은 선 하나로 본문과 나눈다 */
+.resume-head { display: flex; gap: 28px; align-items: flex-end; padding: 8px 0 32px; border-bottom: 2px solid var(--text); }
+.resume-photo { width: 120px; height: 150px; border-radius: 6px; object-fit: cover; flex: none; background: var(--surface-2); }
+.resume-head h1 { font-size: clamp(34px, 5.4vw, 48px); line-height: 1.1; font-weight: 800; letter-spacing: -.03em; }
+.headline { margin-top: 8px; font-size: 18px; line-height: 1.45; color: var(--muted); }
 .contact-line { list-style: none; padding: 0; margin: 14px 0 0; display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 14px; }
-.contact-line a { color: var(--accent); text-decoration: none; }
+.contact-line a { color: var(--accent-text); text-decoration: none; }
 .contact-line a:hover { text-decoration: underline; }
 
 .resume-section { padding-block: 28px; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 140px 1fr; gap: 20px; }
 .resume-section:last-child { border-bottom: 0; }
-.resume-section > h2 { font-size: 14px; font-weight: 700; color: var(--accent); letter-spacing: .04em; padding-top: 2px; }
+.resume-section > h2 { font-size: 15px; font-weight: 700; color: var(--accent-text); padding-top: 1px; }
+/* 한 줄이 너무 길면 읽기 어렵다 (한글 기준 약 45자) */
+.resume-section .prose, .project-body .prose { max-width: 42em; }
 .timeline { list-style: none; padding: 0; margin: 0; display: grid; gap: 22px; }
 .timeline li { display: grid; grid-template-columns: 150px 1fr; gap: 16px; }
 .tl-when { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -184,7 +192,7 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .project-head .chips { margin-top: 8px; }
 .project-body { padding: 0 20px 18px; border-top: 1px solid var(--line); padding-top: 14px; font-size: 14px; }
 .link-row { list-style: none; padding: 0; margin: 12px 0 0; display: flex; flex-wrap: wrap; gap: 12px; }
-.link-row a { color: var(--accent); text-decoration: none; font-weight: 600; }
+.link-row a { color: var(--accent-text); text-decoration: none; font-weight: 600; }
 
 /* ── job++ ─────────────────────────────── */
 .jobs { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 28px; align-items: start; }
@@ -209,7 +217,7 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .site-section h3 { font-size: 16px; }
 .site-section > header .muted { font-size: 13px; }
 .site-links { display: flex; flex-wrap: wrap; gap: 10px; font-size: 13px; }
-.site-links a { color: var(--accent); text-decoration: none; font-weight: 600; }
+.site-links a { color: var(--accent-text); text-decoration: none; font-weight: 600; }
 .postings { list-style: none; padding: 0; margin: 0; }
 .posting { display: flex; gap: 16px; padding: 12px 8px; border-radius: 10px; text-decoration: none; }
 .posting:hover { background: var(--surface-2); }
@@ -226,7 +234,7 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .contact-points { list-style: none; padding: 0; margin: 20px 0 0; display: grid; gap: 12px; }
 .contact-points li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 .contact-points li > span { width: 72px; color: var(--muted); font-size: 13px; }
-.contact-points li > a:not(.btn) { color: var(--accent); font-weight: 600; text-decoration: none; }
+.contact-points li > a:not(.btn) { color: var(--accent-text); font-weight: 600; text-decoration: none; }
 .contact-form { display: grid; gap: 12px; }
 .sent { display: grid; gap: 8px; justify-items: start; }
 .owner-card { margin-top: 32px; display: grid; gap: 14px; }
@@ -236,7 +244,7 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .inbox li { border: 1px solid var(--line); border-radius: 12px; padding: 14px; font-size: 14px; }
 .inbox li.is-unread { border-color: var(--accent); }
 .inbox header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-bottom: 8px; }
-.inbox header a { color: var(--accent); text-decoration: none; }
+.inbox header a { color: var(--accent-text); text-decoration: none; }
 
 /* ── 폼 ───────────────────────────────── */
 .field { display: grid; gap: 4px; min-width: 0; }
@@ -251,7 +259,7 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .grid-3 { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 12px; }
 fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 12px; }
-legend { font-weight: 700; font-size: 14px; color: var(--accent); padding: 0; margin-bottom: 4px; }
+legend { font-weight: 700; font-size: 14px; color: var(--accent-text); padding: 0; margin-bottom: 4px; }
 .toggle { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; font-weight: 600; font-size: 14px; }
 .toggle small { display: block; font-weight: 400; font-size: 12px; color: var(--muted); }
 .toggle input { position: absolute; opacity: 0; width: 1px; height: 1px; }
@@ -291,7 +299,7 @@ legend { font-weight: 700; font-size: 14px; color: var(--accent); padding: 0; ma
   .masthead-inner, .tabs, .content, .foot { padding-inline: 16px; }
   .owner-bar .btn { display: none; }
   .resume-head { flex-direction: column; align-items: flex-start; gap: 16px; }
-  .resume-head h1 { font-size: 26px; }
+  .resume-head h1 { font-size: 32px; }
   .resume-section { grid-template-columns: 1fr; gap: 12px; }
   .timeline li { grid-template-columns: 1fr; gap: 2px; }
   .skills > div { grid-template-columns: 1fr; gap: 6px; }
@@ -306,9 +314,14 @@ legend { font-weight: 700; font-size: 14px; color: var(--accent); padding: 0; ma
   .modal { width: 100%; max-height: 92dvh; border-radius: 18px 18px 0 0; }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; }
+  .btn, .toggle-track, .toggle-track::after { transition: none; }
+}
+
 /* ── 인쇄 (About me → PDF) ─────────────── */
 @media print {
-  :root { --bg: #fff; --surface: #fff; --text: #111; --muted: #555; --line: #ddd; --accent: #c4522a; }
+  :root { --bg: #fff; --surface: #fff; --text: #111; --muted: #555; --line: #ddd; --accent: #c4522a; --accent-text: #b9471f; }
   body { font-size: 12px; }
   .masthead, .foot, .no-print, .page-tools { display: none !important; }
   .content { padding: 0; width: 100%; }
