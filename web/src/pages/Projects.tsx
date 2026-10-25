@@ -1,112 +1,65 @@
 import { useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Navigate } from 'react-router-dom';
 import { Field, Modal, RowList, TextArea, Toggle, WordsField } from '../components/form';
 import { usePage } from '../components/Layout';
 import { api } from '../lib/api';
 import { periodLabel } from '../lib/format';
-import type { Link, Project, ProjectInput, ProjectKind } from '../lib/types';
+import type { Link, Project, ProjectInput, ProjectKind, PublicPage } from '../lib/types';
+import { Section } from '../components/Section';
 
 const KINDS: { kind: ProjectKind; label: string }[] = [
   { kind: 'work', label: '업무 프로젝트' },
   { kind: 'personal', label: '개인 프로젝트' },
 ];
 
-/** project: 내가 했던 일. 업무 / 개인 탭으로 나눈다 (?kind= 로 링크를 걸 수 있다) */
+/** 예전 주소 /:slug/projects → 이력서의 프로젝트 섹션 */
 export const Projects = () => {
-  const { page, reload } = usePage();
-  const [params, setParams] = useSearchParams();
-  const kind: ProjectKind = params.get('kind') === 'personal' ? 'personal' : 'work';
-  const [editing, setEditing] = useState<Project | 'new' | null>(null);
-  const [open, setOpen] = useState<string | null>(null);
+  const { page } = usePage();
+  return <Navigate to={{ pathname: `/${page.profile.slug}`, hash: 'projects' }} replace />;
+};
 
-  const list = page.projects.filter((p) => p.kind === kind);
-  const counts = { work: 0, personal: 0 } satisfies Record<ProjectKind, number>;
-  page.projects.forEach((p) => counts[p.kind]++);
+interface ProjectsSectionProps {
+  page: PublicPage;
+  reload: () => void;
+}
+
+/** 이력서의 프로젝트 칸: 업무 · 개인을 나눠 펼친 채로 보여 준다. 긴 설명만 '자세히'로 */
+export const ProjectsSection = ({ page, reload }: ProjectsSectionProps) => {
+  const [editing, setEditing] = useState<{ project: Project | null; kind: ProjectKind } | null>(null);
+  const owner = page.is_owner;
+  const groups = KINDS.map((k) => ({ ...k, list: page.projects.filter((p) => p.kind === k.kind) })).filter((g) => g.list.length > 0);
+
+  if (groups.length === 0 && !owner) return null;
 
   return (
-    <section className="projects">
-      <div className="page-tools">
-        <div className="segmented" role="tablist" aria-label="프로젝트 구분">
-          {KINDS.map((k) => (
-            <button
-              key={k.kind}
-              type="button"
-              role="tab"
-              aria-selected={kind === k.kind}
-              onClick={() => setParams(k.kind === 'work' ? {} : { kind: k.kind }, { replace: true })}
-            >
-              {k.label} <span className="count">{counts[k.kind]}</span>
-            </button>
-          ))}
-        </div>
-        <span className="grow" />
-        {page.is_owner && (
-          <button type="button" className="btn primary small" onClick={() => setEditing('new')}>
-            + 프로젝트
+    <Section
+      title="프로젝트"
+      id="projects"
+      tools={
+        owner && (
+          <button type="button" className="text-btn no-print" onClick={() => setEditing({ project: null, kind: 'work' })}>
+            + 프로젝트 추가
           </button>
-        )}
-      </div>
-
-      {list.length === 0 ? (
-        <p className="empty">{page.is_owner ? '아직 없어요. ‘+ 프로젝트’로 추가해 보세요.' : '등록된 프로젝트가 없습니다.'}</p>
-      ) : (
-        <ul className="project-list">
-          {list.map((p) => (
-            <li key={p.id} className={`project-card ${p.is_public ? '' : 'is-private'}`}>
-              <button
-                type="button"
-                className="project-head"
-                aria-expanded={open === p.id}
-                onClick={() => setOpen(open === p.id ? null : p.id)}
-              >
-                <span className="project-when">{periodLabel(p.started_on, p.ended_on, '진행 중')}</span>
-                <strong>{p.title}</strong>
-                <span className="sub">{[p.organization, p.role].filter(Boolean).join(' · ')}</span>
-                {p.summary && <span className="project-summary">{p.summary}</span>}
-                {p.tech_stack.length > 0 && (
-                  <span className="chips">
-                    {p.tech_stack.map((t) => (
-                      <span className="chip" key={t}>
-                        {t}
-                      </span>
-                    ))}
-                  </span>
-                )}
-              </button>
-              {open === p.id && (
-                <div className="project-body">
-                  {p.description ? <p className="prose">{p.description}</p> : <p className="muted">상세 설명이 없습니다.</p>}
-                  {p.links.length > 0 && (
-                    <ul className="link-row">
-                      {p.links.map((l) => (
-                        <li key={l.url}>
-                          <a href={l.url} target="_blank" rel="noopener noreferrer">
-                            {l.label} ↗
-                          </a>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {page.is_owner && (
-                    <div className="row-end">
-                      {!p.is_public && <span className="badge muted">비공개</span>}
-                      <button type="button" className="btn ghost small" onClick={() => setEditing(p)}>
-                        편집
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
+        )
+      }
+    >
+      {groups.length === 0 && <p className="muted">아직 없어요. ‘+ 프로젝트 추가’로 넣어 보세요.</p>}
+      {groups.map((g) => (
+        <div className="proj-group" key={g.kind}>
+          {groups.length > 1 && <h3>{g.label}</h3>}
+          <ul className="proj-list">
+            {g.list.map((p) => (
+              <ProjectItem key={p.id} project={p} owner={owner} onEdit={() => setEditing({ project: p, kind: p.kind })} />
+            ))}
+          </ul>
+        </div>
+      ))}
 
       {editing && (
         <ProjectEditor
-          project={editing === 'new' ? null : editing}
-          kind={kind}
-          nextOrder={list.length}
+          project={editing.project}
+          kind={editing.kind}
+          nextOrder={page.projects.filter((p) => p.kind === editing.kind).length}
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null);
@@ -114,7 +67,69 @@ export const Projects = () => {
           }}
         />
       )}
-    </section>
+    </Section>
+  );
+};
+
+interface ProjectItemProps {
+  project: Project;
+  owner: boolean;
+  onEdit: () => void;
+}
+
+const ProjectItem = ({ project: p, owner, onEdit }: ProjectItemProps) => {
+  const [open, setOpen] = useState(false);
+  const meta = [p.organization, p.role].filter(Boolean).join(' · ');
+  return (
+    <li className={`proj ${p.is_public ? '' : 'is-private'}`}>
+      <div className="proj-head">
+        <h4>{p.title}</h4>
+        <span className="proj-when">{periodLabel(p.started_on, p.ended_on, '진행 중')}</span>
+      </div>
+      {meta && <p className="sub">{meta}</p>}
+      {p.summary && <p className="proj-summary">{p.summary}</p>}
+      {p.tech_stack.length > 0 && (
+        <div className="chips">
+          {p.tech_stack.map((t) => (
+            <span className="chip small" key={t}>
+              {t}
+            </span>
+          ))}
+        </div>
+      )}
+      {p.description && (
+        <p className="prose proj-desc" id={`proj-${p.id}`} hidden={!open}>
+          {p.description}
+        </p>
+      )}
+      <div className="proj-foot">
+        {p.description && (
+          <button type="button" className="text-btn proj-more" aria-expanded={open} aria-controls={`proj-${p.id}`} onClick={() => setOpen(!open)}>
+            {open ? '접기' : '자세히'}
+          </button>
+        )}
+        {p.links.length > 0 && (
+          <ul className="link-row">
+            {p.links.map((l) => (
+              <li key={l.url}>
+                <a href={l.url} target="_blank" rel="noopener noreferrer">
+                  {l.label} ↗
+                </a>
+              </li>
+            ))}
+          </ul>
+        )}
+        {owner && (
+          <>
+            <span className="grow" />
+            {!p.is_public && <span className="badge muted no-print">비공개</span>}
+            <button type="button" className="text-btn no-print" onClick={onEdit}>
+              편집
+            </button>
+          </>
+        )}
+      </div>
+    </li>
   );
 };
 

@@ -1,54 +1,38 @@
 import { useState, type FormEvent } from 'react';
+import { Navigate } from 'react-router-dom';
 import { Field, TextArea, Toggle } from '../components/form';
 import { usePage } from '../components/Layout';
+import { Section } from '../components/Section';
 import { api, errorText } from '../lib/api';
 import { dateTimeLabel, phoneLabel } from '../lib/format';
-import type { ContactInput, ContactSettings, Message } from '../lib/types';
+import type { ContactInput, ContactSettings, Message, Profile } from '../lib/types';
 import { useAsync } from '../lib/useAsync';
 
-/** contact: 방문자 → 나. 공개 연락처(메일 · 전화 · 문자) + 메시지 남기기. 주인은 알림 설정과 받은 메시지 */
+/** 예전 주소 /:slug/contact → 이력서의 연락하기 섹션 */
 export const Contact = () => {
   const { page } = usePage();
-  const p = page.profile;
+  return <Navigate to={{ pathname: `/${page.profile.slug}`, hash: 'contact' }} replace />;
+};
 
+/** 이력서 마지막 칸: 방문자 → 나. 메일 · 전화는 왼쪽 칸에 있고 여기서는 메시지를 남긴다 */
+export const ContactSection = ({ profile: p }: { profile: Profile }) => (
+  <Section title="연락하기" id="contact" className="no-print">
+    <p className="muted" style={{ marginBottom: 16, maxWidth: '36em' }}>
+      메시지를 남기면 {p.name || p.slug} 님에게 바로 알림이 가요. 답장 받을 이메일이나 전화번호를 꼭 적어 주세요.
+    </p>
+    <ContactForm slug={p.slug} disabled={!p.is_public} />
+  </Section>
+);
+
+/** 관리 › 받은 메시지 (주인만): 알림 받을 곳 + 메시지함 */
+export const InboxPage = () => {
+  const { page } = usePage();
+  if (!page.is_owner) return <Navigate to={`/${page.profile.slug}`} replace />;
   return (
-    <section className="contact">
-      <div className="contact-grid">
-        <div>
-          <h2>연락하기</h2>
-          <p className="muted">
-            {p.name || p.slug} 님에게 메시지를 남기면 바로 알림이 갑니다. 답장 받을 연락처를 꼭 적어 주세요.
-          </p>
-          {(p.public_email || p.public_phone) && (
-            <ul className="contact-points">
-              {p.public_email && (
-                <li>
-                  <span>메일</span>
-                  <a href={`mailto:${p.public_email}`}>{p.public_email}</a>
-                </li>
-              )}
-              {p.public_phone && (
-                <li>
-                  <span>전화 · 문자</span>
-                  <a href={`tel:${p.public_phone}`}>{phoneLabel(p.public_phone)}</a>
-                  <a className="btn ghost small" href={`sms:${p.public_phone}`}>
-                    문자 보내기
-                  </a>
-                </li>
-              )}
-            </ul>
-          )}
-        </div>
-        <ContactForm slug={p.slug} disabled={!p.is_public} />
-      </div>
-
-      {page.is_owner && (
-        <>
-          <NotifySettings />
-          <Inbox />
-        </>
-      )}
-    </section>
+    <>
+      <Inbox />
+      <NotifySettings />
+    </>
   );
 };
 
@@ -86,7 +70,7 @@ const ContactForm = ({ slug, disabled }: ContactFormProps) => {
 
   if (state === 'sent') {
     return (
-      <div className="card sent">
+      <div className="sent">
         <h3>보냈어요 ✓</h3>
         <p className="muted">확인하는 대로 남겨 주신 연락처로 답장드릴게요.</p>
         <button type="button" className="btn ghost small" onClick={() => setState('idle')}>
@@ -97,7 +81,7 @@ const ContactForm = ({ slug, disabled }: ContactFormProps) => {
   }
 
   return (
-    <form className="card contact-form" onSubmit={submit}>
+    <form className="contact-form" onSubmit={submit}>
       <Field label="이름 · 회사" value={input.name} onChange={(v) => set('name', v)} required maxLength={60} />
       <div className="grid-2">
         <Field label="이메일" type="email" value={input.email} onChange={(v) => set('email', v)} />
@@ -115,8 +99,8 @@ const ContactForm = ({ slug, disabled }: ContactFormProps) => {
         name="website"
       />
       {error && <p className="error">{error}</p>}
-      {disabled && <p className="note">비공개 페이지라 지금은 메시지를 받을 수 없어요 (About me 편집에서 공개).</p>}
-      <button type="submit" className="btn primary" disabled={disabled || state === 'sending'}>
+      {disabled && <p className="note">비공개 페이지라 지금은 메시지를 받을 수 없어요 (이력서 편집에서 공개).</p>}
+      <button type="submit" className="btn primary" style={{ justifySelf: 'start' }} disabled={disabled || state === 'sending'}>
         {state === 'sending' ? '보내는 중…' : '메시지 보내기'}
       </button>
     </form>

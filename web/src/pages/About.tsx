@@ -1,75 +1,73 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import { Field, Modal, RowList, TextArea, Toggle, WordsField } from '../components/form';
 import { usePage } from '../components/Layout';
+import { Section } from '../components/Section';
 import { api } from '../lib/api';
-import { durationLabel, monthLabel, periodLabel, phoneLabel } from '../lib/format';
+import { durationLabel, monthLabel, periodLabel } from '../lib/format';
 import type { Certificate, Education, Experience, Link, Profile, SkillGroup } from '../lib/types';
+import { ContactSection } from './Contact';
+import { ProjectsSection } from './Projects';
 
-/** about me: 기본 이력서 양식 (인적 사항 · 소개 · 경력 · 학력 · 기술 · 자격) */
+/** 한 장짜리 이력서: 소개 · 경력 · 프로젝트 · 학력 · 기술 · 자격 · 연락하기를 한 페이지에 (이름 · 연락처는 왼쪽 칸) */
 export const About = () => {
-  const { page, setPage } = usePage();
+  const { page, setPage, reload } = usePage();
+  const [params, setParams] = useSearchParams();
+  const { hash } = useLocation();
   const [editing, setEditing] = useState(false);
   const p = page.profile;
   const r = p.resume;
+  const owner = page.is_owner;
   const blank = !p.summary && !r.experiences.length && !r.educations.length && !r.skills.length && !r.certificates.length;
+
+  // 왼쪽 칸의 '이력서 편집'은 ?edit=1 로 온다
+  useEffect(() => {
+    if (params.get('edit') !== '1') return;
+    if (owner) setEditing(true);
+    setParams({}, { replace: true });
+  }, [params, owner, setParams]);
+
+  // 예전 주소(/projects · /contact)나 #contact 로 오면 그 섹션으로
+  useEffect(() => {
+    if (hash) document.getElementById(hash.slice(1))?.scrollIntoView();
+  }, [hash]);
+
+  const editButton = owner && (
+    <button type="button" className="text-btn no-print" onClick={() => setEditing(true)}>
+      편집
+    </button>
+  );
 
   return (
     <article className="resume">
-      {page.is_owner && (
-        <div className="page-tools no-print">
-          {!p.is_public && <p className="note">비공개 상태예요. 편집에서 ‘공개’를 켜면 링크로 누구나 볼 수 있어요.</p>}
-          <span className="grow" />
-          <button type="button" className="btn ghost small" onClick={() => window.print()}>
-            PDF로 저장
-          </button>
-          <button type="button" className="btn primary small" onClick={() => setEditing(true)}>
-            편집
-          </button>
-        </div>
+      {owner && !p.is_public && (
+        <p className="note no-print" style={{ marginBottom: 24 }}>
+          비공개 상태예요. 편집에서 ‘링크로 공개’를 켜면 링크로 누구나 볼 수 있어요.
+        </p>
       )}
-
-      <section className="resume-head">
-        {p.photo_url && <img className="resume-photo" src={p.photo_url} alt={`${p.name} 사진`} />}
-        <div>
-          <h1>{p.name || p.slug}</h1>
-          {p.headline && <p className="headline">{p.headline}</p>}
-          <ul className="contact-line">
-            {p.location && <li>{p.location}</li>}
-            {p.public_email && (
-              <li>
-                <a href={`mailto:${p.public_email}`}>{p.public_email}</a>
-              </li>
-            )}
-            {p.public_phone && (
-              <li>
-                <a href={`tel:${p.public_phone}`}>{phoneLabel(p.public_phone)}</a>
-              </li>
-            )}
-            {p.links.map((l) => (
-              <li key={l.url}>
-                <a href={l.url} target="_blank" rel="noopener noreferrer">
-                  {l.label}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </section>
 
       {blank && (
-        <p className="empty">{page.is_owner ? '아직 비어 있어요. ‘편집’을 눌러 이력서를 채워 보세요.' : '아직 준비 중인 페이지입니다.'}</p>
-      )}
-
-      {p.summary && (
-        <section className="resume-section">
+        <section className="r-section">
           <h2>소개</h2>
-          <p className="prose">{p.summary}</p>
+          <div className="r-body">
+            <p className="muted">{owner ? '아직 비어 있어요. 이력서를 채워 보세요.' : '아직 준비 중인 페이지예요.'}</p>
+            {owner && (
+              <button type="button" className="btn primary small no-print" style={{ marginTop: 12 }} onClick={() => setEditing(true)}>
+                이력서 채우기
+              </button>
+            )}
+          </div>
         </section>
       )}
 
+      {p.summary && (
+        <Section title="소개" tools={editButton}>
+          <p className="prose">{p.summary}</p>
+        </Section>
+      )}
+
       {r.experiences.length > 0 && (
-        <section className="resume-section">
-          <h2>경력</h2>
+        <Section title="경력" tools={!p.summary && editButton}>
           <ol className="timeline">
             {r.experiences.map((e, i) => (
               <li key={i}>
@@ -85,12 +83,13 @@ export const About = () => {
               </li>
             ))}
           </ol>
-        </section>
+        </Section>
       )}
 
+      <ProjectsSection page={page} reload={reload} />
+
       {r.educations.length > 0 && (
-        <section className="resume-section">
-          <h2>학력</h2>
+        <Section title="학력">
           <ol className="timeline">
             {r.educations.map((e, i) => (
               <li key={i}>
@@ -102,12 +101,11 @@ export const About = () => {
               </li>
             ))}
           </ol>
-        </section>
+        </Section>
       )}
 
       {r.skills.length > 0 && (
-        <section className="resume-section">
-          <h2>기술</h2>
+        <Section title="기술">
           <dl className="skills">
             {r.skills.map((s, i) => (
               <div key={i}>
@@ -122,12 +120,11 @@ export const About = () => {
               </div>
             ))}
           </dl>
-        </section>
+        </Section>
       )}
 
       {r.certificates.length > 0 && (
-        <section className="resume-section">
-          <h2>자격 · 수상</h2>
+        <Section title="자격 · 수상">
           <ul className="plain-list">
             {r.certificates.map((c, i) => (
               <li key={i}>
@@ -136,8 +133,10 @@ export const About = () => {
               </li>
             ))}
           </ul>
-        </section>
+        </Section>
       )}
+
+      <ContactSection profile={p} />
 
       {editing && (
         <ProfileEditor
@@ -179,14 +178,14 @@ const ProfileEditor = ({ profile, onClose, onSaved }: ProfileEditorProps) => {
   };
 
   return (
-    <Modal title="About me 편집" onClose={onClose} onSubmit={save}>
+    <Modal title="이력서 편집" onClose={onClose} onSubmit={save}>
       <fieldset>
         <legend>공개</legend>
         <Toggle
           label="링크로 공개"
           checked={draft.is_public}
           onChange={(v) => set('is_public', v)}
-          hint="끄면 나만 볼 수 있어요 (Project · Contact 포함)"
+          hint="끄면 나만 볼 수 있어요 (프로젝트 · 연락하기 포함)"
         />
         <Field
           label="공개 주소"
