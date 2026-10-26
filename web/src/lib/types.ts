@@ -27,10 +27,23 @@ export interface SkillGroup {
   items: string[];
 }
 
+export type CertStatus = 'acquired' | 'preparing';
+
+/** 준비 중인 자격 · 자격번호 · 메모 · 시험일은 주인에게만 온다 (방문자 응답에서는 빠진다) */
 export interface Certificate {
   name: string;
   issuer: string;
+  /** YYYY-MM */
   acquired_on: string;
+  status: CertStatus;
+  /** 점수 · 등급 */
+  grade: string;
+  cert_no: string;
+  /** 시험일 YYYY-MM-DD */
+  exam_on: string;
+  /** 유효기간 끝 YYYY-MM-DD */
+  expires_on: string;
+  memo: string;
 }
 
 export interface Resume {
@@ -133,6 +146,8 @@ export interface SiteResult {
   links: KeywordLink[];
   postings: JobPosting[];
   error?: string;
+  /** 조건이 다 걸리지 않았을 때의 안내 (근무지를 모르는 공고를 남겼다 · 링크에는 키워드만) */
+  note?: string;
 }
 
 export interface ContactSettings {

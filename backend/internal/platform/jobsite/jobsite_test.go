@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"slices"
 	"testing"
 
 	"github.com/devsixt/careerpad/backend/internal/domain"
@@ -44,7 +46,7 @@ func serve(t *testing.T, path, body string) *httptest.Server {
 
 func TestWantedSearch(t *testing.T) {
 	srv := serve(t, "/api/chaos/search/v1/position", wantedFixture)
-	got, err := NewWanted(srv.Client(), srv.URL).Search(context.Background(), "golang")
+	got, err := NewWanted(srv.Client(), srv.URL).Search(context.Background(), domain.JobQuery{Keyword: "golang"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +67,7 @@ func TestWantedSearch(t *testing.T) {
 
 func TestJumpitSearch(t *testing.T) {
 	srv := serve(t, "/api/positions", jumpitFixture)
-	got, err := NewJumpit(srv.Client(), srv.URL).Search(context.Background(), "java")
+	got, err := NewJumpit(srv.Client(), srv.URL).Search(context.Background(), domain.JobQuery{Keyword: "java"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +82,7 @@ func TestJumpitSearch(t *testing.T) {
 
 func TestSaraminSearch(t *testing.T) {
 	srv := serve(t, "/job-search", saraminFixture)
-	got, err := NewSaramin(srv.Client(), srv.URL, "key").Search(context.Background(), "go")
+	got, err := NewSaramin(srv.Client(), srv.URL, "key").Search(context.Background(), domain.JobQuery{Keyword: "go"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +103,7 @@ func TestSaraminWithoutKeyIsLinkOnly(t *testing.T) {
 	if s.Site().Listable {
 		t.Error("without access key saramin should not be listable")
 	}
-	if _, err := s.Search(context.Background(), "go"); !errors.Is(err, domain.ErrNotListable) {
+	if _, err := s.Search(context.Background(), domain.JobQuery{Keyword: "go"}); !errors.Is(err, domain.ErrNotListable) {
 		t.Errorf("err = %v, want ErrNotListable", err)
 	}
 }
@@ -111,7 +113,7 @@ func TestHTTPErrorIsReported(t *testing.T) {
 		http.Error(w, "blocked", http.StatusForbidden)
 	}))
 	t.Cleanup(srv.Close)
-	if _, err := NewJumpit(srv.Client(), srv.URL).Search(context.Background(), "go"); err == nil {
+	if _, err := NewJumpit(srv.Client(), srv.URL).Search(context.Background(), domain.JobQuery{Keyword: "go"}); err == nil {
 		t.Fatal("want error on HTTP 403")
 	}
 }
@@ -133,5 +135,92 @@ func TestCareerText(t *testing.T) {
 		if got := careerText(c.min, c.max); got != c.want {
 			t.Errorf("careerText(%v, %v) = %q, want %q", c.min, c.max, got, c.want)
 		}
+	}
+}
+
+func TestResolveRegion(t *testing.T) {
+	cases := []struct {
+		in      string
+		wanted  []string
+		saramin []string
+	}{
+		{"", nil, nil},
+		{"나주", []string{"s-jeolla.naju-si"}, []string{"112000"}},
+		{"전라남도 나주시", []string{"s-jeolla.naju-si"}, []string{"112000"}},
+		{"서울", []string{"seoul.all"}, []string{"101000"}},
+		{"서울특별시", []string{"seoul.all"}, []string{"101000"}},
+		{"서울, 경기", []string{"seoul.all", "gyeonggi.all"}, []string{"101000", "102000"}},
+		{"서울 강서구", []string{"seoul.gangseo-gu"}, []string{"101000"}},
+		{"강서구", []string{"seoul.gangseo-gu", "busan.gangseo-gu"}, []string{"101000", "106000"}},
+		// 시·도 이름이 먼저: 광주는 광주광역시, 경기 광주시는 '경기 광주'
+		{"광주", []string{"gwangju.all"}, []string{"103000"}},
+		{"경기 광주", []string{"gyeonggi.gwangju-si"}, []string{"102000"}},
+		// 점핏의 통합 표기
+		{"전남광주", []string{"gwangju.all", "s-jeolla.all"}, []string{"103000", "112000"}},
+		{"판교", nil, nil},
+	}
+	for _, c := range cases {
+		got := resolveRegion(c.in)
+		if !slices.Equal(got.wanted, c.wanted) || !slices.Equal(got.saramin, c.saramin) {
+			t.Errorf("resolveRegion(%q) = %v %v, want %v %v", c.in, got.wanted, got.saramin, c.wanted, c.saramin)
+		}
+	}
+	if r := resolveRegion("나주"); !r.matches("전남광주 나주시") || r.matches("전남광주 목포시") {
+		t.Error("나주 should match '전남광주 나주시' only")
+	}
+	if r := resolveRegion("전남"); !r.matches("전남광주 목포시") || r.matches("서울 강남구") {
+		t.Error("전남 should match 점핏 '전남광주' 표기")
+	}
+}
+
+// captureQuery 는 요청 주소의 쿼리를 받아 두고 body 를 돌려주는 서버다.
+func captureQuery(t *testing.T, body string, got *url.Values) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		*got = r.URL.Query()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func TestWantedSendsLocationAndYears(t *testing.T) {
+	var q url.Values
+	srv := captureQuery(t, wantedFixture, &q)
+	got, err := NewWanted(srv.Client(), srv.URL).Search(context.Background(), domain.JobQuery{Keyword: "개발", Location: "나주", CareerYears: new(4)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if q.Get("locations") != "s-jeolla.naju-si" || q.Get("years") != "4" {
+		t.Errorf("query = %v", q)
+	}
+	if !got[0].LocationChecked {
+		t.Error("wanted filtered by region: postings should be LocationChecked")
+	}
+
+	// 못 알아본 근무지는 걸지 않고, 유스케이스가 거르도록 남긴다
+	got, _ = NewWanted(srv.Client(), srv.URL).Search(context.Background(), domain.JobQuery{Keyword: "개발", Location: "판교"})
+	if q.Has("locations") || got[0].LocationChecked {
+		t.Errorf("unknown location: query = %v, checked = %v", q, got[0].LocationChecked)
+	}
+}
+
+func TestJumpitFiltersDistrict(t *testing.T) {
+	const body = `{"result":{"totalCount":2,"positions":[
+		{"id":1,"title":"A","companyName":"가","locations":["전남광주 나주시"],"alwaysOpen":true},
+		{"id":2,"title":"B","companyName":"나","locations":["전남광주 광산구"],"alwaysOpen":true}
+	]}}`
+	var q url.Values
+	srv := captureQuery(t, body, &q)
+	got, err := NewJumpit(srv.Client(), srv.URL).Search(context.Background(), domain.JobQuery{Keyword: "개발", Location: "나주", CareerYears: new(4)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if q.Get("locationTag") != "112000" || q.Get("career") != "4" {
+		t.Errorf("query = %v", q)
+	}
+	if len(got) != 1 || got[0].Location != "전남광주 나주시" || !got[0].LocationChecked {
+		t.Errorf("postings = %+v", got)
 	}
 }

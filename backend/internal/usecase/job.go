@@ -116,17 +116,23 @@ func (uc *Job) Results(ctx context.Context, userID, searchID string) ([]domain.S
 
 func (uc *Job) siteResult(ctx context.Context, source domain.JobSource, search *domain.JobSearch) domain.SiteResult {
 	res := domain.SiteResult{Site: source.Site(), Links: []domain.KeywordLink{}, Postings: []domain.JobPosting{}}
+	query := func(kw string) domain.JobQuery {
+		return domain.JobQuery{Keyword: kw, Location: search.Location, CareerYears: search.CareerYears}
+	}
 	for _, kw := range search.Keywords {
-		res.Links = append(res.Links, domain.KeywordLink{Keyword: kw, URL: source.SearchURL(kw)})
+		res.Links = append(res.Links, domain.KeywordLink{Keyword: kw, URL: source.SearchURL(query(kw))})
 	}
 	if !res.Site.Listable {
+		if search.Location != "" || search.CareerYears != nil {
+			res.Note = "검색 링크에는 키워드만 들어가요. 근무지 · 경력은 사이트에서 골라 주세요."
+		}
 		return res
 	}
 
 	byKeyword := make(map[string][]domain.JobPosting, len(search.Keywords))
 	var failures []string
 	for _, kw := range search.Keywords {
-		postings, err := uc.fetch(ctx, source, kw)
+		postings, err := uc.fetch(ctx, source, query(kw))
 		if err != nil {
 			failures = append(failures, kw)
 			continue
@@ -136,7 +142,11 @@ func (uc *Job) siteResult(ctx context.Context, source domain.JobSource, search *
 	if len(failures) > 0 {
 		res.Error = fmt.Sprintf("일부 키워드를 가져오지 못했습니다: %s", strings.Join(failures, ", "))
 	}
-	res.Postings = filterPostings(mergePostings(search.Keywords, byKeyword), search)
+	var unknown int
+	res.Postings, unknown = filterPostings(mergePostings(search.Keywords, byKeyword), search)
+	if unknown > 0 {
+		res.Note = fmt.Sprintf("근무지를 알 수 없는 공고 %d건은 빼지 않고 남겼어요.", unknown)
+	}
 	if len(res.Postings) > maxPostingsSite {
 		res.Postings = res.Postings[:maxPostingsSite]
 	}
@@ -144,8 +154,12 @@ func (uc *Job) siteResult(ctx context.Context, source domain.JobSource, search *
 }
 
 // fetch 는 사이트·키워드 하나를 캐시를 거쳐 가져온다.
-func (uc *Job) fetch(ctx context.Context, source domain.JobSource, keyword string) ([]domain.JobPosting, error) {
-	key := source.Site().ID + "\x00" + strings.ToLower(keyword)
+func (uc *Job) fetch(ctx context.Context, source domain.JobSource, q domain.JobQuery) ([]domain.JobPosting, error) {
+	years := ""
+	if q.CareerYears != nil {
+		years = fmt.Sprint(*q.CareerYears)
+	}
+	key := strings.Join([]string{source.Site().ID, strings.ToLower(q.Keyword), strings.TrimSpace(q.Location), years}, "\x00")
 
 	uc.mu.Lock()
 	hit, ok := uc.cache[key]
@@ -156,12 +170,12 @@ func (uc *Job) fetch(ctx context.Context, source domain.JobSource, keyword strin
 
 	fetchCtx, cancel := context.WithTimeout(ctx, jobFetchTimeout)
 	defer cancel()
-	postings, err := source.Search(fetchCtx, keyword)
+	postings, err := source.Search(fetchCtx, q)
 	if err != nil {
 		if errors.Is(err, domain.ErrNotListable) {
 			return nil, err
 		}
-		return nil, fmt.Errorf("job: %s %q: %w", source.Site().ID, keyword, err)
+		return nil, fmt.Errorf("job: %s %q: %w", source.Site().ID, q.Keyword, err)
 	}
 
 	uc.mu.Lock()
@@ -202,18 +216,19 @@ func mergePostings(keywords []string, byKeyword map[string][]domain.JobPosting) 
 	return out
 }
 
-// filterPostings 는 근무지 · 경력 · 제외어 조건을 적용한다.
-// 사이트가 근무지 · 경력을 주지 않은 공고는 모르는 것이므로 빼지 않는다.
-func filterPostings(postings []domain.JobPosting, search *domain.JobSearch) []domain.JobPosting {
-	location := strings.ToLower(strings.TrimSpace(search.Location))
+// filterPostings 는 근무지 · 경력 · 제외어 조건을 적용한다. 사이트가 이미 조건을 걸었어도 한 번 더 본다.
+// 근무지는 어댑터가 맞춰 본 공고(LocationChecked)는 그대로 두고, 나머지는 근무지 글자로 본다.
+// 사이트가 근무지 · 경력을 주지 않은 공고는 모르는 것이므로 빼지 않는다 (unknown: 근무지를 모르는 채 남긴 수).
+func filterPostings(postings []domain.JobPosting, search *domain.JobSearch) (out []domain.JobPosting, unknown int) {
+	location := strings.TrimSpace(search.Location)
 	excludes := make([]string, 0, len(search.ExcludeWords))
 	for _, w := range search.ExcludeWords {
 		excludes = append(excludes, strings.ToLower(w))
 	}
 
-	out := make([]domain.JobPosting, 0, len(postings))
+	out = make([]domain.JobPosting, 0, len(postings))
 	for _, p := range postings {
-		if location != "" && p.Location != "" && !strings.Contains(strings.ToLower(p.Location), location) {
+		if location != "" && !p.LocationChecked && p.Location != "" && !locationMatches(p.Location, location) {
 			continue
 		}
 		if y := search.CareerYears; y != nil {
@@ -228,9 +243,25 @@ func filterPostings(postings []domain.JobPosting, search *domain.JobSearch) []do
 		if slices.ContainsFunc(excludes, func(w string) bool { return strings.Contains(haystack, w) }) {
 			continue
 		}
+		if location != "" && !p.LocationChecked && p.Location == "" {
+			unknown++
+		}
 		out = append(out, p)
 	}
-	return out
+	return out, unknown
+}
+
+// locationMatches 는 근무지 글자 비교다. 쉼표로 나눈 후보 중 하나라도, 그 안의 낱말이 모두 들어 있으면 맞다
+// ("서울, 경기" · "성남 판교"). 지역 이름표가 없는 경우를 위한 것이라 단순 비교만 한다.
+func locationMatches(postingLocation, location string) bool {
+	have := strings.ToLower(postingLocation)
+	for alt := range strings.SplitSeq(location, ",") {
+		words := strings.Fields(strings.ToLower(alt))
+		if len(words) > 0 && !slices.ContainsFunc(words, func(w string) bool { return !strings.Contains(have, w) }) {
+			return true
+		}
+	}
+	return false
 }
 
 func (uc *Job) normalize(in domain.JobSearch) (*domain.JobSearch, error) {

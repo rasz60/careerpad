@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/devsixt/careerpad/backend/internal/domain"
@@ -48,6 +49,18 @@ func month(field, value string) (string, error) {
 	v := strings.TrimSpace(value)
 	if v != "" && !monthPattern.MatchString(v) {
 		return "", invalid("%s 는 YYYY-MM 형식이어야 합니다", field)
+	}
+	return v, nil
+}
+
+// date 는 "YYYY-MM-DD" 이나 빈 값만 받는다.
+func date(field, value string) (string, error) {
+	v := strings.TrimSpace(value)
+	if v == "" {
+		return "", nil
+	}
+	if _, err := time.Parse(time.DateOnly, v); err != nil {
+		return "", invalid("%s 는 YYYY-MM-DD 형식이어야 합니다", field)
 	}
 	return v, nil
 }

@@ -114,8 +114,8 @@ func NewLinkOnly(site domain.JobSite, prefix string) domain.JobSource {
 
 func (s *linkOnly) Site() domain.JobSite { return s.site }
 
-func (s *linkOnly) SearchURL(keyword string) string { return s.prefix + url.QueryEscape(keyword) }
+func (s *linkOnly) SearchURL(q domain.JobQuery) string { return s.prefix + url.QueryEscape(q.Keyword) }
 
-func (s *linkOnly) Search(context.Context, string) ([]domain.JobPosting, error) {
+func (s *linkOnly) Search(context.Context, domain.JobQuery) ([]domain.JobPosting, error) {
 	return nil, domain.ErrNotListable
 }

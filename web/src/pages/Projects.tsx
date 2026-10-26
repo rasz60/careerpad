@@ -21,13 +21,17 @@ export const Projects = () => {
 interface ProjectsSectionProps {
   page: PublicPage;
   reload: () => void;
+  /** 작업 공간에서만 추가 · 편집 */
+  editable: boolean;
 }
 
 /** 이력서의 프로젝트 칸: 업무 · 개인을 나눠 펼친 채로 보여 준다. 긴 설명만 '자세히'로 */
-export const ProjectsSection = ({ page, reload }: ProjectsSectionProps) => {
+export const ProjectsSection = ({ page, reload, editable }: ProjectsSectionProps) => {
   const [editing, setEditing] = useState<{ project: Project | null; kind: ProjectKind } | null>(null);
-  const owner = page.is_owner;
-  const groups = KINDS.map((k) => ({ ...k, list: page.projects.filter((p) => p.kind === k.kind) })).filter((g) => g.list.length > 0);
+  const owner = editable;
+  // 주인이 공개 화면으로 볼 때도 방문자와 똑같이 (비공개 프로젝트는 작업 공간에서만)
+  const shown = owner ? page.projects : page.projects.filter((p) => p.is_public);
+  const groups = KINDS.map((k) => ({ ...k, list: shown.filter((p) => p.kind === k.kind) })).filter((g) => g.list.length > 0);
 
   if (groups.length === 0 && !owner) return null;
 
@@ -113,7 +117,7 @@ const ProjectItem = ({ project: p, owner, onEdit }: ProjectItemProps) => {
             {p.links.map((l) => (
               <li key={l.url}>
                 <a href={l.url} target="_blank" rel="noopener noreferrer">
-                  {l.label} ↗
+                  {l.label}
                 </a>
               </li>
             ))}

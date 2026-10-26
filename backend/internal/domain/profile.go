@@ -35,11 +35,23 @@ type SkillGroup struct {
 	Items    []string `json:"items"`
 }
 
-// Certificate 는 자격증·수상 한 줄이다.
+// 자격증 상태. 예전 데이터(빈 값)는 취득으로 본다.
+const (
+	CertAcquired  = "acquired"
+	CertPreparing = "preparing"
+)
+
+// Certificate 는 자격증·수상 한 줄이다. 준비 중인 자격 · 자격번호 · 메모는 주인에게만 보인다.
 type Certificate struct {
 	Name       string `json:"name"`
 	Issuer     string `json:"issuer"`
 	AcquiredOn string `json:"acquired_on"`
+	Status     string `json:"status"`
+	Grade      string `json:"grade"`      // 점수 · 등급 (TOEIC 905, 1급 …)
+	CertNo     string `json:"cert_no"`    // 자격번호
+	ExamOn     string `json:"exam_on"`    // 시험일 YYYY-MM-DD (준비 중)
+	ExpiresOn  string `json:"expires_on"` // 유효기간 끝 YYYY-MM-DD
+	Memo       string `json:"memo"`
 }
 
 // Resume 는 about me 의 이력서 본문이다. 화면 구성이 자주 바뀔 수 있어 DB 에는 jsonb 한 칸으로 둔다.

@@ -87,6 +87,38 @@ func TestNormalizeProfileCleansInput(t *testing.T) {
 	}
 }
 
+func TestCertificates(t *testing.T) {
+	got, err := normalizeProfile(domain.Profile{
+		Slug: "my-page",
+		Resume: domain.Resume{Certificates: []domain.Certificate{
+			{Name: "정보처리기사"},
+			{Name: "SQLD", Status: domain.CertPreparing, ExamOn: "2026-11-15", CertNo: "x", Memo: "m"},
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Resume.Certificates[0].Status != domain.CertAcquired {
+		t.Errorf("empty status should become acquired: %+v", got.Resume.Certificates[0])
+	}
+	for name, c := range map[string]domain.Certificate{
+		"bad status": {Name: "A", Status: "done"},
+		"bad date":   {Name: "A", ExamOn: "2026-02-30"},
+	} {
+		if _, err := normalizeProfile(domain.Profile{Slug: "my-page", Resume: domain.Resume{Certificates: []domain.Certificate{c}}}); !errors.Is(err, domain.ErrInvalidInput) {
+			t.Errorf("%s: err = %v, want ErrInvalidInput", name, err)
+		}
+	}
+
+	pub := publicCertificates([]domain.Certificate{
+		{Name: "A", Status: domain.CertAcquired, CertNo: "123", Memo: "m"},
+		{Name: "B", Status: domain.CertPreparing},
+	})
+	if len(pub) != 1 || pub[0].Name != "A" || pub[0].CertNo != "" || pub[0].Memo != "" {
+		t.Errorf("publicCertificates = %+v", pub)
+	}
+}
+
 func TestNormalizeContact(t *testing.T) {
 	if _, err := normalizeContact(ContactInput{Name: "a", Message: "hi"}); !errors.Is(err, domain.ErrInvalidInput) {
 		t.Errorf("no reply channel: err = %v, want ErrInvalidInput", err)

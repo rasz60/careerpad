@@ -1,20 +1,14 @@
 import { useState } from 'react';
-import { Navigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { Field, Modal, WordsField } from '../components/form';
-import { usePage } from '../components/Layout';
+import { PageHead } from '../components/Workspace';
 import { api, errorText } from '../lib/api';
 import { deadlineLabel } from '../lib/format';
 import type { JobSearch, JobSearchInput, JobSite, SiteResult } from '../lib/types';
 import { useAsync } from '../lib/useAsync';
 
-/** job++ (주인만): 저장한 검색 조건 목록 → 조건을 누르면 사이트별 공고 목록 */
+/** /me/jobs: 저장한 검색 조건 목록 → 조건을 누르면 사이트별 공고 목록 */
 export const Jobs = () => {
-  const { page } = usePage();
-  if (!page.is_owner) return <Navigate to={`/${page.profile.slug}`} replace />;
-  return <JobBoard />;
-};
-
-const JobBoard = () => {
   const [params, setParams] = useSearchParams();
   const searches = useAsync(() => api.jobSearches(), []);
   const sites = useAsync(() => api.jobSites(), []);
@@ -25,15 +19,14 @@ const JobBoard = () => {
   const select = (id: string) => setParams({ s: id }, { replace: true });
 
   return (
+    <>
+    <PageHead title="채용공고" sub="저장한 조건으로 여러 사이트의 공고를 한 번에 모아 봐요">
+      <button type="button" className="btn primary small" onClick={() => setEditing('new')} disabled={!sites.data}>
+        검색 조건 추가
+      </button>
+    </PageHead>
     <section className="jobs">
-      <aside className="job-searches">
-        <div className="page-tools">
-          <h2>검색 조건</h2>
-          <span className="grow" />
-          <button type="button" className="btn primary small" onClick={() => setEditing('new')} disabled={!sites.data}>
-            + 조건
-          </button>
-        </div>
+      <aside className="job-searches" aria-label="검색 조건">
         {searches.loading && !searches.data && <p className="muted">불러오는 중…</p>}
         {searches.error ? <p className="error">{errorText(searches.error)}</p> : null}
         {searches.data && list.length === 0 && (
@@ -58,7 +51,7 @@ const JobBoard = () => {
                     s.career_years !== null && `경력 ${s.career_years}년`,
                   ]
                     .filter(Boolean)
-                    .join(' · ')}
+                    .join(', ')}
                 </small>
               </button>
             </li>
@@ -90,6 +83,7 @@ const JobBoard = () => {
         />
       )}
     </section>
+    </>
   );
 };
 
@@ -121,8 +115,8 @@ const Results = ({ search, onEdit }: ResultsProps) => {
         <div>
           <h2>{search.name}</h2>
           <small className="muted">
-            {results.loading ? '사이트에서 모으는 중…' : `공고 ${total}건`}
-            {search.exclude_words.length > 0 && ` · 제외: ${search.exclude_words.join(', ')}`}
+            {results.loading ? '사이트에서 모으는 중…' : <><b className="big-num">{total}</b>건</>}
+            {search.exclude_words.length > 0 && ` (제외: ${search.exclude_words.join(', ')})`}
           </small>
         </div>
         <span className="grow" />
@@ -163,7 +157,7 @@ interface SiteSectionProps {
 }
 
 const SiteSection = ({ result }: SiteSectionProps) => {
-  const { site, links, postings, error } = result;
+  const { site, links, postings, error, note } = result;
   return (
     <section className="site-section">
       <header>
@@ -173,12 +167,13 @@ const SiteSection = ({ result }: SiteSectionProps) => {
         <span className="site-links">
           {links.map((l) => (
             <a key={l.keyword} href={l.url} target="_blank" rel="noopener noreferrer">
-              {l.keyword} ↗
+              {l.keyword}
             </a>
           ))}
         </span>
       </header>
       {error && <p className="error small">{error}</p>}
+      {note && <p className="site-note">{note}</p>}
       {site.listable && postings.length === 0 && !error && <p className="muted">조건에 맞는 공고가 없어요.</p>}
       {postings.length > 0 && (
         <ul className="postings">
@@ -187,7 +182,12 @@ const SiteSection = ({ result }: SiteSectionProps) => {
               <a href={p.url} target="_blank" rel="noopener noreferrer" className="posting">
                 <span className="posting-main">
                   <strong>{p.title}</strong>
-                  <span className="sub">{[p.company, p.location, p.career].filter(Boolean).join(' · ')}</span>
+                  <span className="sub">
+                    <b>{p.company}</b>
+                    {[p.location, p.career].filter(Boolean).map((t) => (
+                      <span key={t}>{t}</span>
+                    ))}
+                  </span>
                   {p.tags.length > 0 && (
                     <span className="chips">
                       {p.tags.slice(0, 6).map((t) => (
@@ -297,14 +297,14 @@ const SearchEditor = ({ search, sites, nextOrder, onClose, onSaved }: SearchEdit
           value={draft.location}
           onChange={(v) => set('location', v)}
           placeholder="서울"
-          hint="근무지에 이 글자가 있는 공고만 (근무지를 안 주는 사이트는 그대로)"
+          hint="시·도나 시·군·구 이름. 쉼표로 여러 곳 (서울, 경기). 원티드 · 점핏 · 사람인은 사이트의 지역 필터로 찾아요"
         />
         <Field
           label="내 경력 (년)"
           type="number"
           value={draft.career_years === null ? '' : String(draft.career_years)}
           onChange={(v) => set('career_years', v === '' ? null : Math.max(0, Math.min(40, Number(v))))}
-          hint="공고의 경력 범위에 드는 것만. 비우면 전체"
+          hint="이 경력으로 지원할 수 있는 공고만. 비우면 전체"
         />
       </div>
       <WordsField

@@ -33,6 +33,17 @@ export const deadlineLabel = (date: string, today = new Date()): string => {
   return `D-${days}`;
 };
 
+/** 오늘(서울)부터 그날까지 남은 날. 지났으면 음수, 날짜가 없으면 null */
+export const daysUntil = (date: string, today = new Date()): number | null => {
+  if (!date) return null;
+  const seoul = today.toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' });
+  return Math.round((Date.parse(date) - Date.parse(seoul)) / 86_400_000);
+};
+
+/** "2026-11-15" → "11월 15일 (일)" */
+export const dayLabel = (date: string): string =>
+  new Date(`${date}T00:00:00+09:00`).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short', timeZone: 'Asia/Seoul' });
+
 /** 쉼표·줄바꿈으로 나눈 낱말 목록 (태그 입력) */
 export const splitWords = (text: string): string[] =>
   text

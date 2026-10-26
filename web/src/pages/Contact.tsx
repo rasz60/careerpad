@@ -3,6 +3,7 @@ import { Navigate } from 'react-router-dom';
 import { Field, TextArea, Toggle } from '../components/form';
 import { usePage } from '../components/Layout';
 import { Section } from '../components/Section';
+import { PageHead, useWorkspace } from '../components/Workspace';
 import { api, errorText } from '../lib/api';
 import { dateTimeLabel, phoneLabel } from '../lib/format';
 import type { ContactInput, ContactSettings, Message, Profile } from '../lib/types';
@@ -24,14 +25,17 @@ export const ContactSection = ({ profile: p }: { profile: Profile }) => (
   </Section>
 );
 
-/** 관리 › 받은 메시지 (주인만): 알림 받을 곳 + 메시지함 */
+/** /me/inbox: 이력서를 보고 남긴 메시지 + 알림 받을 곳 */
 export const InboxPage = () => {
-  const { page } = usePage();
-  if (!page.is_owner) return <Navigate to={`/${page.profile.slug}`} replace />;
+  const { messages } = useWorkspace();
+  const unread = (messages ?? []).filter((m) => !m.is_read).length;
   return (
     <>
-      <Inbox />
-      <NotifySettings />
+      <PageHead title="메시지" sub={unread > 0 ? `읽지 않은 메시지 ${unread}개` : '공개 이력서의 ‘메시지 남기기’로 온 연락이에요'} />
+      <div className="inbox-layout">
+        <Inbox />
+        <NotifySettings />
+      </div>
     </>
   );
 };
@@ -135,9 +139,10 @@ const NotifySettings = () => {
   };
 
   return (
-    <form className="card owner-card" onSubmit={save}>
-      <h3>알림 받을 곳 <span className="badge muted">나만 보여요</span></h3>
-      <div className="grid-2">
+    <form className="notify" onSubmit={save}>
+      <h2>알림 받을 곳</h2>
+      <p className="muted">새 메시지가 오면 여기로 알려 줘요. 방문자에게는 보이지 않아요.</p>
+      <div className="notify-grid">
         <div>
           <Toggle
             label="메일로 알림"
@@ -171,12 +176,11 @@ const NotifySettings = () => {
 
 /** 주인: 받은 메시지 (알림이 실패해도 여기에는 남는다) */
 const Inbox = () => {
-  const messages = useAsync(() => api.messages(), []);
-  const list = messages.data ?? [];
-  const unread = list.filter((m) => !m.is_read).length;
+  const { messages, setMessages } = useWorkspace();
+  const list = messages ?? [];
 
   const patch = (id: string, change: Partial<Message> | null) =>
-    messages.setData(change ? list.map((m) => (m.id === id ? { ...m, ...change } : m)) : list.filter((m) => m.id !== id));
+    setMessages(change ? list.map((m) => (m.id === id ? { ...m, ...change } : m)) : list.filter((m) => m.id !== id));
 
   const toggleRead = async (m: Message) => {
     await api.markMessage(m.id, !m.is_read);
@@ -189,12 +193,10 @@ const Inbox = () => {
   };
 
   return (
-    <section className="card owner-card">
-      <h3>
-        받은 메시지 {unread > 0 && <span className="badge warn">새 메시지 {unread}</span>}
-      </h3>
-      {messages.error ? <p className="error">{errorText(messages.error)}</p> : null}
-      {messages.data && list.length === 0 && <p className="muted">아직 받은 메시지가 없어요.</p>}
+    <section className="inbox-list" aria-label="받은 메시지">
+      {messages && list.length === 0 && (
+        <p className="empty">아직 받은 메시지가 없어요. 이력서 링크를 보내 두면 여기로 모여요.</p>
+      )}
       <ul className="inbox">
         {list.map((m) => (
           <li key={m.id} className={m.is_read ? '' : 'is-unread'}>
@@ -205,7 +207,7 @@ const Inbox = () => {
               <span className="grow" />
               <small className="muted">
                 {dateTimeLabel(m.created_at)}
-                {m.delivered_by.length > 0 ? ` · ${m.delivered_by.map((c) => (c === 'sms' ? '문자' : '메일')).join('·')} 알림` : ' · 알림 없음'}
+                {m.delivered_by.length > 0 ? `, ${m.delivered_by.map((c) => (c === 'sms' ? '문자' : '메일')).join('과 ')}로 알림` : ', 알림 안 감'}
               </small>
             </header>
             <p className="prose">{m.body}</p>

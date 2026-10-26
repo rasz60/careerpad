@@ -52,7 +52,23 @@ func (uc *Profile) Public(ctx context.Context, slug, viewerID string) (*PublicPa
 	if err != nil {
 		return nil, err
 	}
+	if !owner {
+		p.Resume.Certificates = publicCertificates(p.Resume.Certificates)
+	}
 	return &PublicPage{Profile: p, Projects: projects, IsOwner: owner}, nil
+}
+
+// publicCertificates 는 방문자에게 보일 자격만 남긴다: 취득한 것만, 자격번호 · 메모 · 시험일은 빼고.
+func publicCertificates(in []domain.Certificate) []domain.Certificate {
+	out := make([]domain.Certificate, 0, len(in))
+	for _, c := range in {
+		if c.Status == domain.CertPreparing {
+			continue
+		}
+		c.CertNo, c.Memo, c.ExamOn = "", "", ""
+		out = append(out, c)
+	}
+	return out
 }
 
 // Mine 은 로그인한 사용자의 프로필이다. 처음이면 이메일 아이디로 주소를 정해 빈 프로필을 만든다.
@@ -230,6 +246,28 @@ func normalizeResume(in domain.Resume) (domain.Resume, error) {
 			return out, err
 		}
 		if row.AcquiredOn, err = month("취득일", c.AcquiredOn); err != nil {
+			return out, err
+		}
+		switch row.Status = strings.TrimSpace(c.Status); row.Status {
+		case "":
+			row.Status = domain.CertAcquired
+		case domain.CertAcquired, domain.CertPreparing:
+		default:
+			return out, invalid("자격증 상태가 올바르지 않습니다")
+		}
+		if row.Grade, err = text("점수 · 등급", c.Grade, 30); err != nil {
+			return out, err
+		}
+		if row.CertNo, err = text("자격번호", c.CertNo, 40); err != nil {
+			return out, err
+		}
+		if row.ExamOn, err = date("시험일", c.ExamOn); err != nil {
+			return out, err
+		}
+		if row.ExpiresOn, err = date("유효기간", c.ExpiresOn); err != nil {
+			return out, err
+		}
+		if row.Memo, err = text("자격증 메모", c.Memo, 500); err != nil {
 			return out, err
 		}
 		if row.Name != "" {

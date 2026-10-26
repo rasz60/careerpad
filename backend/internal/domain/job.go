@@ -53,15 +53,27 @@ type JobPosting struct {
 	Tags      []string `json:"tags"`
 	// Keywords 는 이 공고가 걸린 검색어들이다 (키워드마다 따로 검색해서 합친다).
 	Keywords []string `json:"keywords"`
+	// LocationChecked 면 어댑터가 근무지 조건을 이미 맞춰 봤다 (사이트의 지역 필터 · 지역 이름표).
+	// 아니면 유스케이스가 근무지 글자로 거른다.
+	LocationChecked bool `json:"-"`
+}
+
+// JobQuery 는 사이트에 묻는 검색 한 번이다. 근무지 · 경력은 사이트가 받는 만큼 검색 조건으로 넘기고,
+// 받은 결과는 유스케이스가 한 번 더 거른다 (사이트가 조건을 못 받았거나 넓게 받았을 때를 위해).
+type JobQuery struct {
+	Keyword     string
+	Location    string
+	CareerYears *int
 }
 
 // JobSource 는 채용 사이트 하나의 검색 어댑터다.
 type JobSource interface {
 	Site() JobSite
 	// SearchURL 은 사이트에서 직접 검색 결과를 여는 주소다.
-	SearchURL(keyword string) string
-	// Search 는 키워드 하나로 최신 공고를 가져온다. 목록을 못 주는 사이트는 ErrNotListable.
-	Search(ctx context.Context, keyword string) ([]JobPosting, error)
+	SearchURL(q JobQuery) string
+	// Search 는 조건 하나로 최신 공고를 가져온다. 목록을 못 주는 사이트는 ErrNotListable.
+	// 사이트가 근무지 조건을 받아 서버에서 걸렀다면 공고의 Location 이 비어 있어도 된다.
+	Search(ctx context.Context, q JobQuery) ([]JobPosting, error)
 }
 
 // KeywordLink 는 키워드별 사이트 검색 링크다.
@@ -77,4 +89,6 @@ type SiteResult struct {
 	Postings []JobPosting  `json:"postings"`
 	// Error 는 사이트 조회가 실패했을 때의 이유다 (다른 사이트 결과는 그대로 보여 준다).
 	Error string `json:"error,omitempty"`
+	// Note 는 조건이 다 걸리지 않았을 때의 안내다 (근무지를 모르는 공고를 남겼다 · 링크에는 키워드만 들어간다 등).
+	Note string `json:"note,omitempty"`
 }

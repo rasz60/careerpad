@@ -1,63 +1,130 @@
 import { useEffect, useState } from 'react';
-import { useLocation, useSearchParams } from 'react-router-dom';
+import { Link as RouterLink, useLocation, useSearchParams } from 'react-router-dom';
 import { Field, Modal, RowList, TextArea, Toggle, WordsField } from '../components/form';
-import { usePage } from '../components/Layout';
+import { Identity, usePage } from '../components/Layout';
 import { Section } from '../components/Section';
+import { PageHead, useWorkspace } from '../components/Workspace';
 import { api } from '../lib/api';
 import { durationLabel, monthLabel, periodLabel } from '../lib/format';
-import type { Certificate, Education, Experience, Link, Profile, SkillGroup } from '../lib/types';
+import type { Education, Experience, Link, Profile, PublicPage, SkillGroup } from '../lib/types';
 import { ContactSection } from './Contact';
 import { ProjectsSection } from './Projects';
 
-/** 한 장짜리 이력서: 소개 · 경력 · 프로젝트 · 학력 · 기술 · 자격 · 연락하기를 한 페이지에 (이름 · 연락처는 왼쪽 칸) */
+/** /:slug — 방문자가 보는 이력서 본문 (이름 · 연락처는 왼쪽 칸). 고치기는 작업 공간에서 */
 export const About = () => {
-  const { page, setPage, reload } = usePage();
-  const [params, setParams] = useSearchParams();
+  const { page, reload } = usePage();
   const { hash } = useLocation();
-  const [editing, setEditing] = useState(false);
-  const p = page.profile;
-  const r = p.resume;
-  const owner = page.is_owner;
-  const blank = !p.summary && !r.experiences.length && !r.educations.length && !r.skills.length && !r.certificates.length;
-
-  // 왼쪽 칸의 '이력서 편집'은 ?edit=1 로 온다
-  useEffect(() => {
-    if (params.get('edit') !== '1') return;
-    if (owner) setEditing(true);
-    setParams({}, { replace: true });
-  }, [params, owner, setParams]);
 
   // 예전 주소(/projects · /contact)나 #contact 로 오면 그 섹션으로
   useEffect(() => {
     if (hash) document.getElementById(hash.slice(1))?.scrollIntoView();
   }, [hash]);
 
-  const editButton = owner && (
-    <button type="button" className="text-btn no-print" onClick={() => setEditing(true)}>
+  return (
+    <article className="resume">
+      <ResumeBody page={page} reload={reload} />
+      <ContactSection profile={page.profile} />
+    </article>
+  );
+};
+
+/** /me/resume — 내 이력서: 방문자와 같은 본문 + 편집 · PDF · 링크 복사 */
+export const ResumePage = () => {
+  const { page, setPage, reload } = useWorkspace();
+  const [params, setParams] = useSearchParams();
+  const [editing, setEditing] = useState(params.get('edit') === '1');
+  const [copied, setCopied] = useState(false);
+  const p = page.profile;
+  const url = `${location.origin}${import.meta.env.BASE_URL}${p.slug}`;
+
+  // 다른 화면의 '이력서 채우기'는 ?edit=1 로 온다
+  useEffect(() => {
+    if (params.has('edit')) setParams({}, { replace: true });
+  }, [params, setParams]);
+
+  const copy = async () => {
+    await navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  return (
+    <>
+      <PageHead
+        title="이력서"
+        sub={
+          <>
+            <span className={`badge ${p.is_public ? 'ok' : 'muted'}`}>{p.is_public ? '링크로 공개 중' : '비공개'}</span>
+            <a href={url} target="_blank" rel="noopener noreferrer" className="plain-link">
+              {url.replace(/^https?:\/\//, '')}
+            </a>
+          </>
+        }
+      >
+        <button type="button" className="btn ghost small" onClick={() => void copy()}>
+          {copied ? '복사했어요' : '링크 복사'}
+        </button>
+        <button type="button" className="btn ghost small" onClick={() => window.print()}>
+          PDF로 저장
+        </button>
+        <button type="button" className="btn primary small" onClick={() => setEditing(true)}>
+          이력서 편집
+        </button>
+      </PageHead>
+
+      <article className="resume in-sheet">
+        <div className="resume-id">
+          <Identity profile={p} />
+        </div>
+        <ResumeBody page={page} reload={reload} onEdit={() => setEditing(true)} />
+      </article>
+
+      {editing && (
+        <ProfileEditor
+          profile={p}
+          onClose={() => setEditing(false)}
+          onSaved={(next) => {
+            setEditing(false);
+            setPage({ ...page, profile: next });
+          }}
+        />
+      )}
+    </>
+  );
+};
+
+interface ResumeBodyProps {
+  page: PublicPage;
+  reload: () => void;
+  /** 있으면 주인의 편집 도구를 보인다 (작업 공간) */
+  onEdit?: () => void;
+}
+
+/** 소개 · 경력 · 프로젝트 · 학력 · 기술 · 자격 */
+const ResumeBody = ({ page, reload, onEdit }: ResumeBodyProps) => {
+  const p = page.profile;
+  const r = p.resume;
+  // 이력서에는 취득한 자격만 (준비 중인 자격은 작업 공간의 자격증 탭에서)
+  const certs = r.certificates.filter((c) => c.status !== 'preparing');
+  const blank = !p.summary && !r.experiences.length && !r.educations.length && !r.skills.length && !certs.length;
+
+  const editButton = onEdit && (
+    <button type="button" className="text-btn no-print" onClick={onEdit}>
       편집
     </button>
   );
 
   return (
-    <article className="resume">
-      {owner && !p.is_public && (
-        <p className="note no-print" style={{ marginBottom: 24 }}>
-          비공개 상태예요. 편집에서 ‘링크로 공개’를 켜면 링크로 누구나 볼 수 있어요.
-        </p>
-      )}
-
+    <>
       {blank && (
-        <section className="r-section">
-          <h2>소개</h2>
-          <div className="r-body">
-            <p className="muted">{owner ? '아직 비어 있어요. 이력서를 채워 보세요.' : '아직 준비 중인 페이지예요.'}</p>
-            {owner && (
-              <button type="button" className="btn primary small no-print" style={{ marginTop: 12 }} onClick={() => setEditing(true)}>
-                이력서 채우기
-              </button>
-            )}
-          </div>
-        </section>
+        <Section title="소개">
+          <p className="muted">{onEdit ? '아직 비어 있어요. 소개와 경력부터 채워 보세요.' : '아직 준비 중인 페이지예요.'}</p>
+          {onEdit && (
+            <button type="button" className="btn primary small no-print" style={{ marginTop: 12 }} onClick={onEdit}>
+              이력서 채우기
+            </button>
+          )}
+        </Section>
       )}
 
       {p.summary && (
@@ -67,12 +134,12 @@ export const About = () => {
       )}
 
       {r.experiences.length > 0 && (
-        <Section title="경력" tools={!p.summary && editButton}>
+        <Section title="경력" tools={editButton}>
           <ol className="timeline">
             {r.experiences.map((e, i) => (
               <li key={i}>
                 <div className="tl-when">
-                  {periodLabel(e.started_on, e.ended_on, '재직 중')}
+                  <span className="num">{periodLabel(e.started_on, e.ended_on, '재직 중')}</span>
                   <small>{durationLabel(e.started_on, e.ended_on)}</small>
                 </div>
                 <div className="tl-what">
@@ -86,17 +153,19 @@ export const About = () => {
         </Section>
       )}
 
-      <ProjectsSection page={page} reload={reload} />
+      <ProjectsSection page={page} reload={reload} editable={!!onEdit} />
 
       {r.educations.length > 0 && (
-        <Section title="학력">
+        <Section title="학력" tools={editButton}>
           <ol className="timeline">
             {r.educations.map((e, i) => (
               <li key={i}>
-                <div className="tl-when">{periodLabel(e.started_on, e.ended_on, '재학 중')}</div>
+                <div className="tl-when">
+                  <span className="num">{periodLabel(e.started_on, e.ended_on, '재학 중')}</span>
+                </div>
                 <div className="tl-what">
                   <h3>{e.school}</h3>
-                  <p className="sub">{[e.major, e.degree].filter(Boolean).join(' · ')}</p>
+                  <p className="sub">{[e.major, e.degree].filter(Boolean).join(', ')}</p>
                 </div>
               </li>
             ))}
@@ -105,7 +174,7 @@ export const About = () => {
       )}
 
       {r.skills.length > 0 && (
-        <Section title="기술">
+        <Section title="기술" tools={editButton}>
           <dl className="skills">
             {r.skills.map((s, i) => (
               <div key={i}>
@@ -123,34 +192,30 @@ export const About = () => {
         </Section>
       )}
 
-      {r.certificates.length > 0 && (
-        <Section title="자격 · 수상">
-          <ul className="plain-list">
-            {r.certificates.map((c, i) => (
+      {certs.length > 0 && (
+        <Section
+          title="자격 · 수상"
+          tools={
+            onEdit && (
+              <RouterLink className="text-btn no-print" to="/me/certs">
+                자격증에서 관리
+              </RouterLink>
+            )
+          }
+        >
+          <ul className="cert-lines">
+            {certs.map((c, i) => (
               <li key={i}>
                 <strong>{c.name}</strong>
-                <span className="muted">{[c.issuer, c.acquired_on && monthLabel(c.acquired_on)].filter(Boolean).join(' · ')}</span>
+                {c.grade && <span>{c.grade}</span>}
+                <span className="muted">{c.issuer}</span>
+                {c.acquired_on && <span className="muted num">{monthLabel(c.acquired_on)}</span>}
               </li>
             ))}
           </ul>
         </Section>
       )}
-
-      <ContactSection profile={p} />
-
-      {editing && (
-        <ProfileEditor
-          profile={p}
-          onClose={() => setEditing(false)}
-          onSaved={(next) => {
-            setEditing(false);
-            setPage({ ...page, profile: next });
-            // 주소를 바꿨으면 새 주소로
-            if (next.slug !== p.slug) location.replace(`${import.meta.env.BASE_URL}${next.slug}`);
-          }}
-        />
-      )}
-    </article>
+    </>
   );
 };
 
@@ -163,7 +228,6 @@ interface ProfileEditorProps {
 const emptyExperience = (): Experience => ({ company: '', role: '', started_on: '', ended_on: '', description: '' });
 const emptyEducation = (): Education => ({ school: '', major: '', degree: '', started_on: '', ended_on: '' });
 const emptySkill = (): SkillGroup => ({ category: '', items: [] });
-const emptyCertificate = (): Certificate => ({ name: '', issuer: '', acquired_on: '' });
 const emptyLink = (): Link => ({ label: '', url: '' });
 
 const ProfileEditor = ({ profile, onClose, onSaved }: ProfileEditorProps) => {
@@ -274,20 +338,7 @@ const ProfileEditor = ({ profile, onClose, onSaved }: ProfileEditorProps) => {
         )}
       />
 
-      <RowList
-        title="자격 · 수상"
-        rows={draft.resume.certificates}
-        onChange={(rows) => setResume('certificates', rows)}
-        empty={emptyCertificate}
-        addLabel="자격 · 수상"
-        render={(row, update) => (
-          <div className="grid-3">
-            <Field label="이름" value={row.name} onChange={(v) => update({ name: v })} />
-            <Field label="발급 기관" value={row.issuer} onChange={(v) => update({ issuer: v })} />
-            <Field label="취득" type="month" value={row.acquired_on} onChange={(v) => update({ acquired_on: v })} />
-          </div>
-        )}
-      />
+      <p className="muted">자격증은 ‘자격증’ 탭에서 따로 관리해요. 취득한 것만 이력서에 보여요.</p>
     </Modal>
   );
 };

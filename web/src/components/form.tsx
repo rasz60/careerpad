@@ -5,7 +5,7 @@ interface FieldProps {
   label: string;
   value: string;
   onChange: (value: string) => void;
-  type?: 'text' | 'email' | 'tel' | 'url' | 'month' | 'number';
+  type?: 'text' | 'email' | 'tel' | 'url' | 'month' | 'date' | 'number';
   placeholder?: string;
   hint?: string;
   required?: boolean;

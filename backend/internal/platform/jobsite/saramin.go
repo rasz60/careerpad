@@ -15,6 +15,7 @@ import (
 
 // Saramin 은 사람인 공식 Open API(https://oapi.saramin.co.kr/job-search) 검색이다.
 // 접근 키(SARAMIN_ACCESS_KEY)가 없으면 목록 없이 검색 링크만 준다.
+// 근무지는 1차 지역 코드(loc_mcd)로 넘기고, 경력은 응답의 경력 범위로 유스케이스가 거른다.
 type Saramin struct {
 	client    *http.Client
 	baseURL   string
@@ -29,8 +30,8 @@ func (s *Saramin) Site() domain.JobSite {
 	return domain.JobSite{ID: "saramin", Name: "사람인", Listable: s.accessKey != ""}
 }
 
-func (s *Saramin) SearchURL(keyword string) string {
-	return "https://www.saramin.co.kr/zf_user/search/recruit?searchword=" + url.QueryEscape(keyword)
+func (s *Saramin) SearchURL(q domain.JobQuery) string {
+	return "https://www.saramin.co.kr/zf_user/search/recruit?searchword=" + url.QueryEscape(q.Keyword)
 }
 
 type saraminResponse struct {
@@ -63,15 +64,19 @@ type saraminResponse struct {
 
 var kst = time.FixedZone("KST", 9*60*60)
 
-func (s *Saramin) Search(ctx context.Context, keyword string) ([]domain.JobPosting, error) {
+func (s *Saramin) Search(ctx context.Context, query domain.JobQuery) ([]domain.JobPosting, error) {
 	if s.accessKey == "" {
 		return nil, domain.ErrNotListable
 	}
 	q := url.Values{
 		"access-key": {s.accessKey},
-		"keywords":   {keyword},
+		"keywords":   {query.Keyword},
 		"count":      {"50"},
 		"sort":       {"pd"}, // 게시일 최신순
+	}
+	reg := resolveRegion(query.Location)
+	if reg.resolved() {
+		q.Set("loc_mcd", strings.Join(reg.saramin, ","))
 	}
 	var body saraminResponse
 	if err := getJSON(ctx, s.client, s.baseURL+"/job-search?"+q.Encode(), nil, &body); err != nil {
@@ -80,6 +85,10 @@ func (s *Saramin) Search(ctx context.Context, keyword string) ([]domain.JobPosti
 
 	out := make([]domain.JobPosting, 0, len(body.Jobs.Job))
 	for _, j := range body.Jobs.Job {
+		location := strings.ReplaceAll(html.UnescapeString(j.Position.Location.Name), " > ", " ")
+		if reg.resolved() && location != "" && !reg.matches(location) {
+			continue
+		}
 		lv := j.Position.ExperienceLevel
 		var min, max *int
 		switch lv.Code {
@@ -104,13 +113,15 @@ func (s *Saramin) Search(ctx context.Context, keyword string) ([]domain.JobPosti
 			ID:        "saramin:" + string(j.ID),
 			Title:     html.UnescapeString(j.Position.Title),
 			Company:   html.UnescapeString(j.Company.Detail.Name),
-			Location:  strings.ReplaceAll(html.UnescapeString(j.Position.Location.Name), " > ", " "),
+			Location:  location,
 			Career:    career,
 			CareerMin: min,
 			CareerMax: max,
 			Deadline:  unixDate(string(j.ExpirationTimestamp)),
 			URL:       j.URL,
 			Tags:      splitKeywords(html.UnescapeString(j.Keyword)),
+
+			LocationChecked: reg.resolved() && location != "",
 		})
 	}
 	return out, nil
