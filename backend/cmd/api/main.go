@@ -54,6 +54,7 @@ func run() error {
 		projects = postgres.NewProjectRepository(pool)
 		searches = postgres.NewJobSearchRepository(pool)
 		contacts = postgres.NewContactRepository(pool)
+		roadmaps = postgres.NewRoadmapRepository(pool)
 
 		mailer = notify.NewSMTPMailer(notify.SMTPConfig{
 			Host: cfg.SMTPHost, Port: cfg.SMTPPort, Username: cfg.SMTPUsername, Password: cfg.SMTPPassword, From: cfg.MailFrom,
@@ -62,8 +63,9 @@ func run() error {
 			APIKey: cfg.SolapiAPIKey, APISecret: cfg.SolapiAPISecret, From: cfg.SMSFrom,
 		})
 		sources = jobsite.Sources(jobsite.Options{
-			Client:           &http.Client{Timeout: 10 * time.Second},
-			SaraminAccessKey: cfg.SaraminAccessKey,
+			Client:            &http.Client{Timeout: 10 * time.Second},
+			SaraminAccessKey:  cfg.SaraminAccessKey,
+			JobalioServiceKey: cfg.JobalioServiceKey,
 		})
 	)
 
@@ -76,6 +78,7 @@ func run() error {
 		Contact: usecase.NewContact(profiles, contacts, mailer, sms,
 			ratelimit.New(cfg.ContactPerHour, time.Hour),
 			usecase.ContactOptions{SMSDailyLimit: cfg.SMSDailyLimit, PublicURL: cfg.PublicURL}),
+		Roadmap: usecase.NewRoadmap(roadmaps),
 	})
 
 	server := &http.Server{

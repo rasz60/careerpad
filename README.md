@@ -6,8 +6,9 @@ ae:p 포털(`https://ae2p.duckdns.org`)의 **커리어++** 앱입니다. 웹은 
 
 | 작업 공간 메뉴 (`/me/…`) | 내용 |
 |---|---|
-| 오늘 (`/me`) | 다가오는 시험 · 유효기간 D-day, 새 메시지, 저장한 공고 검색, 이력서 채운 정도 |
-| 채용공고 (`jobs`) | 사이트 · 키워드 · 근무지 · 경력 · 제외어로 검색 조건 저장 → 누르면 사이트별 공고 목록 |
+| 오늘 (`/me`) | 다가오는 시험 · 유효기간 D-day, 이번 달 로드맵 할 일, 새 메시지, 저장한 공고 검색, 이력서 채운 정도 |
+| 로드맵 (`roadmap`) | Claude와 만든 체크리스트 md를 올려 기간 · 구간 · 달마다 할 일을 체크. 진행률 · 이번 달 · 기한 지남 · 다음 마일스톤, 분류별 · 구간별 달성률, 매주 습관 12주 기록. md로 내보내기 |
+| 채용공고 (`jobs`) | 사이트 · 키워드 · 근무지 · 경력 · 제외어로 검색 조건 저장 → 누르면 사이트별 공고 목록, 또는 모든 사이트를 마감 임박순 한 목록으로 |
 | 자격증 (`certs`) | 준비 중(시험일 D-day) · 취득(점수 · 자격번호 · 유효기간) 관리. 취득한 것만 공개 이력서에 나간다 |
 | 이력서 (`resume`) | 인적 사항 · 소개 · 경력 · 프로젝트 · 학력 · 기술 편집, PDF 저장, 공개 링크 |
 | 메시지 (`inbox`) | 공개 이력서의 '메시지 남기기'로 온 연락 + 알림 받을 곳(메일 · SMS) |
@@ -15,7 +16,7 @@ ae:p 포털(`https://ae2p.duckdns.org`)의 **커리어++** 앱입니다. 웹은 
 공개 페이지(`/:slug`)는 이력서 한 장 + 메시지 남기기 폼입니다. 주인이 열면 위에 '작업 공간으로 돌아가기' 띠가 붙고,
 나머지는 방문자와 똑같이 보입니다 (비공개 프로젝트 · 준비 중인 자격은 빠진다). 예전 주소 `/:slug/jobs` · `/:slug/inbox` 는 `/me/…` 로 넘어갑니다.
 
-화면은 회색 책상 위 흰 종이 한 장 + 종이 가장자리의 인덱스 탭입니다. 탭마다 색이 하나씩 있고(오늘 · 채용공고 · 자격증 · 이력서 · 메시지),
+화면은 회색 책상 위 흰 종이 한 장 + 종이 가장자리의 인덱스 탭입니다. 탭마다 색이 하나씩 있고(오늘 · 로드맵 · 채용공고 · 자격증 · 이력서 · 메시지),
 그 화면의 주 버튼 · 제목 형광펜 · 강조도 같은 색을 씁니다 (`web/src/styles.css` 의 `[data-tone]`).
 
 ## 구조
@@ -34,9 +35,19 @@ https://ae2p.duckdns.org/api/career/*  Caddy ─── 127.0.0.1:8092     Go API
   무엇을 공개할지는 백엔드가 정합니다 (비공개 프로필 · 비공개 프로젝트 · 알림 받을 연락처는 주인에게만).
 - **이력서 본문은 `profiles.resume`(jsonb) 한 칸**입니다. 화면 구성이 자주 바뀔 수 있어 마이그레이션 없이 항목을 늘리게 했습니다
   (Go `domain.Resume` · TS `Resume` 타입이 형식을 정합니다).
+- **로드맵**은 `career.roadmaps`(구간은 `phases` jsonb 한 칸) · `roadmap_items`(그 달까지 할 일, 완료일) · `roadmap_habits`(체크한 ISO 주) 세 표입니다.
+  서버는 Claude 를 부르지 않습니다. 웹의 "Claude로 만들기"가 부탁 글을 복사해 주고, Claude 가 준 md 를 올리면 서버가 읽어 저장합니다.
+  md 형식은 마크다운 체크리스트 그대로입니다 (`---` 머리말 title · period · lead · categories, `## 구간 (YYYY-MM ~ YYYY-MM)` · `> 목표:`,
+  `### YYYY-MM`, `- [ ] [분류] ★ 할 일 (완료 YYYY-MM-DD)`, `## 매주 습관`). 규칙은 [roadmap_markdown.go](backend/internal/usecase/roadmap_markdown.go),
+  견본은 [testdata/roadmap_sample.md](backend/internal/usecase/testdata/roadmap_sample.md). 내보낸 md 를 다시 올리면 같은 로드맵이 됩니다 (습관의 주별 기록은 빠짐).
+  '오늘 · 이번 달 · 이번 주'는 한국 시간으로 셉니다.
 - **Job++ 사이트**
-  - 목록을 가져옴: 원티드 · 점핏(사이트 화면이 쓰는 공개 JSON), 사람인(공식 Open API — `SARAMIN_ACCESS_KEY` 가 있을 때)
-  - 검색 링크만: 잡코리아 · LinkedIn · 키 없는 사람인
+  - 목록을 가져옴: 원티드 · 점핏(사이트 화면이 쓰는 공개 JSON), 사람인(공식 Open API — `SARAMIN_ACCESS_KEY` 가 있을 때),
+    잡알리오(공공데이터포털 '공공기관 채용정보 조회서비스' — `JOBALIO_SERVICE_KEY` 가 있을 때)
+  - 검색 링크만: 잡코리아 · LinkedIn · SK Careers, 키 없는 사람인 · 잡알리오
+  - 채용 첫 화면 링크만(검색어를 주소로 받지 않음): 리멤버 · 삼성 · LG. 기업 채용 사이트는 공개 API 가 없고 SK 는 robots.txt 가 검색 주소 수집을 막아 서버가 긁지 않습니다
+  - 사이트는 채용 사이트 · 공공기관 · 기업 채용 세 묶음으로 보여 줍니다 (`JobSite.group`)
+  - 잡알리오는 키워드가 NCS 대분류 이름(예: `정보통신`)이면 그 분야 공고 전체를, 아니면 공고 제목에 든 것을 찾고, 근무지는 시·도 코드로 넘깁니다 (광주 · 전남은 `전남광주통합특별시` 하나)
   - 키워드마다 따로 검색해 공고 ID 로 합치고, 근무지 · 경력 · 제외어로 거릅니다. 사이트 · 조건별 결과는 10분 캐시
   - 근무지 · 경력은 **사이트에 검색 조건으로 넘깁니다** (원티드 `locations` · `years`, 점핏 `locationTag` · `career`, 사람인 `loc_mcd`).
     근무지 글자("나주", "서울 강남구", "서울, 경기")는 [regions.go](backend/internal/platform/jobsite/regions.go) 가 지역 코드로 바꾸고,
@@ -55,14 +66,14 @@ careerpad/
 │  ├─ cmd/api/main.go               # 진입점 · 의존성 조립
 │  ├─ internal/
 │  │  ├─ domain/                    # 엔티티 + 리포지토리 · 어댑터 인터페이스
-│  │  ├─ usecase/                   # profile, project, job, contact (+ 테스트)
+│  │  ├─ usecase/                   # profile, project, job, contact, roadmap (+ md 해석 · 테스트, testdata/roadmap_sample.md)
 │  │  ├─ repository/postgres/       # SQL (career.* 스키마)
 │  │  ├─ platform/                  # auth(Supabase JWT), jobsite(채용 사이트), notify(메일·SMS), ratelimit
 │  │  ├─ transport/http/            # 라우터 · 핸들러 · 미들웨어
 │  │  └─ config/
-│  └─ migrations/0001_career_schema.sql
+│  └─ migrations/0001_career_schema.sql · 0002_roadmap.sql
 ├─ web/                             # React + Vite + TS
-│  └─ src/ pages(Today · Jobs · Certificates · About · Projects · Contact · Home) · components(Workspace · Layout) · lib
+│  └─ src/ pages(Today · Roadmap · RoadmapDetail · Jobs · Certificates · About · Projects · Contact · Home) · components(Workspace · Layout) · lib
 ├─ scripts/deploy.sh                # 서버 배포 (GitHub Actions 가 호출)
 └─ ecosystem.config.cjs             # pm2
 ```
@@ -79,6 +90,10 @@ careerpad/
 | `GET·POST /api/v1/me/job-searches`, `PUT·DELETE …/{id}`, `GET …/{id}/results` | 필요 | 검색 조건 · 사이트별 결과 |
 | `GET·PUT /api/v1/me/contact-settings` | 필요 | 알림 받을 곳 |
 | `GET /api/v1/me/messages`, `PATCH·DELETE …/{id}` | 필요 | 받은 메시지 |
+| `GET·POST /api/v1/me/roadmaps`, `POST …/preview` | 필요 | 로드맵 목록(항목 집계) · md 로 만들기 · md 미리보기(저장 안 함) |
+| `GET·PUT·DELETE /api/v1/me/roadmaps/{id}`, `GET …/{id}/markdown` | 필요 | 로드맵 한 장 · 정보 고치기 · 지우기 · md 내보내기 |
+| `POST …/{id}/items`, `PATCH·DELETE …/items/{itemId}` | 필요 | 할 일 추가 · 고치기(체크 `{"done": true}`) · 지우기 |
+| `POST …/{id}/habits`, `DELETE …/habits/{habitId}`, `PUT·DELETE …/habits/{habitId}/weeks/{YYYY-Www}` | 필요 | 매주 습관 · 그 주 체크 |
 
 ## 개발
 
@@ -111,7 +126,8 @@ GitHub Actions 러너가 만들고, 묶음(tar.gz)을 SSH 표준입력으로 보
 코드를 빌드 커밋에 맞추고 → 서버 아키텍처에 맞는 바이너리 · 웹을 바꿔 끼우고 → pm2 재시작 → `/healthz` 확인 (30초 안에 응답이 없으면 이전 버전으로 되돌림).
 `deploy.sh` 는 전체 10분 제한(`DEPLOY_TIMEOUT`) · 동시 배포 잠금이 있습니다. 서버에 Go 는 필요 없습니다.
 
-1. **DB**: Supabase SQL Editor 에서 [backend/migrations/0001_career_schema.sql](backend/migrations/0001_career_schema.sql) 실행
+1. **DB**: Supabase SQL Editor 에서 [backend/migrations/0001_career_schema.sql](backend/migrations/0001_career_schema.sql) →
+   [0002_roadmap.sql](backend/migrations/0002_roadmap.sql) 순서로 실행 (새 마이그레이션은 push(배포) 전에 실행한다)
 2. **서버에 받기**: `git clone git@github-careerpad:rasz60/careerpad.git ~/careerpad` (읽기 전용 Deploy key. 공개 저장소면 https 로 받아도 된다)
 3. **`.env`**: 루트 `.env`(백엔드)만. 웹 값은 서버가 아니라 GitHub 저장소 **Variables** 에 `VITE_SUPABASE_URL` · `VITE_SUPABASE_ANON_KEY`
 4. **Caddy**: 포털 저장소 `deploy/Caddyfile` 의 `/career/` · `/api/career/` 블록 반영 → `sudo systemctl reload caddy`

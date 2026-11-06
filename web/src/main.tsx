@@ -10,6 +10,8 @@ import { Contact, InboxPage } from './pages/Contact';
 import { Home } from './pages/Home';
 import { Jobs } from './pages/Jobs';
 import { Projects } from './pages/Projects';
+import { RoadmapList } from './pages/Roadmap';
+import { RoadmapDetailPage } from './pages/RoadmapDetail';
 import { Today } from './pages/Today';
 import '@fontsource/barlow-condensed/500.css';
 import '@fontsource/barlow-condensed/700.css';
@@ -19,7 +21,7 @@ import './styles.css';
 // ae:p 포털(같은 도메인) 아래 /career/ 에서 돈다. vite.config.ts 의 base 와 같은 값
 const BASENAME = import.meta.env.BASE_URL.replace(/\/$/, '');
 
-// /me 는 나만 쓰는 작업 공간 (오늘 · 채용공고 · 자격증 · 이력서 · 메시지).
+// /me 는 나만 쓰는 작업 공간 (오늘 · 로드맵 · 채용공고 · 자격증 · 이력서 · 메시지).
 // /:slug 는 로그인 없이 열리는 공개 이력서 한 장 ('me' 는 서버가 주소로 못 쓰게 막아 둔 이름)
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -29,6 +31,8 @@ createRoot(document.getElementById('root')!).render(
           <Route index element={<Home />} />
           <Route path="me" element={<Workspace />}>
             <Route index element={<Today />} />
+            <Route path="roadmap" element={<RoadmapList />} />
+            <Route path="roadmap/:id" element={<RoadmapDetailPage />} />
             <Route path="jobs" element={<Jobs />} />
             <Route path="certs" element={<Certificates />} />
             <Route path="resume" element={<ResumePage />} />

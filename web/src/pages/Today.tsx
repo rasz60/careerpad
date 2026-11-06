@@ -1,15 +1,16 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { PageHead, useWorkspace, type Tone } from '../components/Workspace';
 import { api, errorText } from '../lib/api';
 import { dateTimeLabel, dayLabel, daysUntil } from '../lib/format';
-import type { Profile } from '../lib/types';
+import { categoryTone, isDone, isoWeek, monthTitle, pct, roadmapStatus } from '../lib/roadmap';
+import type { Profile, RoadmapDetail, RoadmapItem } from '../lib/types';
 import { useAsync } from '../lib/useAsync';
 
 /** 유효기간이 이만큼 남으면 오늘 화면에 올린다 */
 const EXPIRY_NOTICE_DAYS = 120;
 
-/** /me — 수첩의 오늘 쪽: 다가오는 시험 · 새 메시지 · 저장한 검색 · 이력서 상태 */
+/** /me — 수첩의 오늘 쪽: 다가오는 시험 · 이번 달 로드맵 · 새 메시지 · 저장한 검색 · 이력서 상태 */
 export const Today = () => {
   const { page, messages } = useWorkspace();
   const searches = useAsync(() => api.jobSearches(), []);
@@ -23,6 +24,10 @@ export const Today = () => {
       <div className="today">
         <Block tone="mustard" title="다가오는 일정" to="/me/certs" more="자격증 보기" className="today-schedule">
           <Schedule profile={p} />
+        </Block>
+
+        <Block tone="rose" title="이번 달 로드맵" to="/me/roadmap" more="로드맵 보기">
+          <RoadmapThisMonth today={today} />
         </Block>
 
         <Block tone="teal" title="새 메시지" to="/me/inbox" more="메시지 보기">
@@ -173,6 +178,122 @@ const ResumeStatus = ({ profile: p, projects }: { profile: Profile; projects: nu
           빈 칸 채우기
         </Link>
       )}
+    </div>
+  );
+};
+
+/** 이번 달에 한 번에 보여 줄 미완료 할 일 수 (로드맵마다) */
+const TODAY_ITEMS = 5;
+
+/** 진행 중인 로드맵마다 이번 달 할 일 · 진행률 · 기한 지남 · 이번 주 습관. 여기서 바로 체크할 수 있다 */
+const RoadmapThisMonth = ({ today }: { today: string }) => {
+  const { roadmaps } = useWorkspace();
+  const active = (roadmaps.data ?? []).filter((r) => roadmapStatus(r, today) === 'active');
+  const ids = active.map((r) => r.id).join(',');
+  const details = useAsync(() => Promise.all(active.map((r) => api.roadmap(r.id))), [ids]);
+
+  if (roadmaps.error) return <p className="error small">{errorText(roadmaps.error)}</p>;
+  if (roadmaps.data && active.length === 0) {
+    return (
+      <p className="quiet">
+        Claude와 만든 체크리스트 md를 올려 두면 이번 달 할 일을 여기서 보여 줘요.{' '}
+        <Link to="/me/roadmap?new=1">로드맵 만들기</Link>
+      </p>
+    );
+  }
+  if (details.error) return <p className="error small">{errorText(details.error)}</p>;
+  if (!details.data) return null;
+
+  return (
+    <div className="today-roadmaps">
+      {details.data.map((d) => (
+        <RoadmapMonthCard
+          key={d.id}
+          roadmap={d}
+          today={today}
+          onChange={(next) => {
+            details.setData(details.data!.map((x) => (x.id === next.id ? next : x)));
+            roadmaps.reload();
+          }}
+        />
+      ))}
+    </div>
+  );
+};
+
+const RoadmapMonthCard = ({ roadmap: d, today, onChange }: { roadmap: RoadmapDetail; today: string; onChange: (d: RoadmapDetail) => void }) => {
+  const [error, setError] = useState('');
+  const cur = today.slice(0, 7);
+  const week = isoWeek(today);
+  const month = d.items.filter((it) => it.month === cur);
+  const done = month.filter(isDone).length;
+  const todo = month.filter((it) => !isDone(it)).sort((a, b) => a.sort_order - b.sort_order);
+  const overdue = d.items.filter((it) => !isDone(it) && it.month < cur).length;
+  const habitsDone = d.habits.filter((h) => h.weeks.includes(week)).length;
+
+  const check = async (it: RoadmapItem) => {
+    setError('');
+    try {
+      const saved = await api.patchRoadmapItem(d.id, it.id, { done: true });
+      onChange({ ...d, items: d.items.map((x) => (x.id === saved.id ? saved : x)) });
+    } catch (e) {
+      setError(errorText(e));
+    }
+  };
+
+  return (
+    <div className="today-roadmap">
+      <div className="today-roadmap-head">
+        <Link to={`/me/roadmap/${d.id}`}>{d.title}</Link>
+        <span className="muted">
+          {Number(cur.slice(5))}월 할 일 <b className="big-num">{done}</b>
+          <span className="num"> / {month.length}</span>
+        </span>
+      </div>
+      <span className="meter" aria-hidden="true">
+        <i style={{ width: `${pct(done, month.length)}%` }} />
+      </span>
+      {month.length === 0 ? (
+        <p className="quiet small">{monthTitle(cur)}에 잡힌 할 일이 없어요.</p>
+      ) : todo.length === 0 ? (
+        <p className="quiet small">이번 달 할 일을 모두 끝냈어요.</p>
+      ) : (
+        <ul className="today-todo">
+          {todo.slice(0, TODAY_ITEMS).map((it) => {
+            const tone = categoryTone(d.categories, it.category);
+            return (
+              <li key={it.id}>
+                <label>
+                  <input type="checkbox" checked={false} onChange={() => void check(it)} />
+                  <span>
+                    {it.category && (
+                      <span className={`cat-chip ${tone ? '' : 'is-plain'}`} data-tone={tone}>
+                        {it.category}
+                      </span>
+                    )}
+                    {it.is_key && <span className="star">★</span>}
+                    {it.body}
+                  </span>
+                </label>
+              </li>
+            );
+          })}
+          {todo.length > TODAY_ITEMS && (
+            <li className="muted small">
+              <Link to={`/me/roadmap/${d.id}`}>그 밖에 {todo.length - TODAY_ITEMS}개 더</Link>
+            </li>
+          )}
+        </ul>
+      )}
+      {error && <p className="error small">{error}</p>}
+      <p className="today-roadmap-foot muted">
+        {overdue > 0 ? <span className="badge warn">기한 지난 일 {overdue}개</span> : '기한 지난 일 없음'}
+        {d.habits.length > 0 && (
+          <span>
+            이번 주 습관 <b className="num">{habitsDone} / {d.habits.length}</b>
+          </span>
+        )}
+      </p>
     </div>
   );
 };

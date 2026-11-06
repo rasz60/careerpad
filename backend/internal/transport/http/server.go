@@ -16,6 +16,7 @@ type Deps struct {
 	Project  *usecase.Project
 	Job      *usecase.Job
 	Contact  *usecase.Contact
+	Roadmap  *usecase.Roadmap
 }
 
 // NewRouter 는 Go 1.22 ServeMux 패턴 라우팅으로 전체 API 를 구성한다.
@@ -23,6 +24,7 @@ type Deps struct {
 func NewRouter(d Deps) http.Handler {
 	public := NewPublicHandler(d.Profile, d.Contact)
 	me := NewMeHandler(d.Profile, d.Project, d.Job, d.Contact)
+	roadmap := NewRoadmapHandler(d.Roadmap)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -57,6 +59,22 @@ func NewRouter(d Deps) http.Handler {
 	protected("GET /api/v1/me/messages", me.Messages)
 	protected("PATCH /api/v1/me/messages/{id}", me.MarkMessage)
 	protected("DELETE /api/v1/me/messages/{id}", me.DeleteMessage)
+
+	// 개인 로드맵 (md 가져오기 · 체크 · 매주 습관)
+	protected("GET /api/v1/me/roadmaps", roadmap.List)
+	protected("POST /api/v1/me/roadmaps/preview", roadmap.Preview)
+	protected("POST /api/v1/me/roadmaps", roadmap.Create)
+	protected("GET /api/v1/me/roadmaps/{id}", roadmap.Get)
+	protected("PUT /api/v1/me/roadmaps/{id}", roadmap.Update)
+	protected("DELETE /api/v1/me/roadmaps/{id}", roadmap.Delete)
+	protected("GET /api/v1/me/roadmaps/{id}/markdown", roadmap.Markdown)
+	protected("POST /api/v1/me/roadmaps/{id}/items", roadmap.CreateItem)
+	protected("PATCH /api/v1/me/roadmaps/{id}/items/{itemId}", roadmap.PatchItem)
+	protected("DELETE /api/v1/me/roadmaps/{id}/items/{itemId}", roadmap.DeleteItem)
+	protected("POST /api/v1/me/roadmaps/{id}/habits", roadmap.CreateHabit)
+	protected("DELETE /api/v1/me/roadmaps/{id}/habits/{habitId}", roadmap.DeleteHabit)
+	protected("PUT /api/v1/me/roadmaps/{id}/habits/{habitId}/weeks/{week}", roadmap.CheckWeek)
+	protected("DELETE /api/v1/me/roadmaps/{id}/habits/{habitId}/weeks/{week}", roadmap.CheckWeek)
 
 	return withLogging(withCORS(d.Config.AllowOrigin, mux))
 }

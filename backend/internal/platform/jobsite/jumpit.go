@@ -23,7 +23,7 @@ func NewJumpit(client *http.Client, baseURL string) *Jumpit {
 }
 
 func (s *Jumpit) Site() domain.JobSite {
-	return domain.JobSite{ID: "jumpit", Name: "점핏", Listable: true}
+	return domain.JobSite{ID: "jumpit", Name: "점핏", Group: domain.JobGroupBoard, Listable: true}
 }
 
 // jumpitPages 는 한 번에 이어 받는 쪽 수다 (쪽당 16건)

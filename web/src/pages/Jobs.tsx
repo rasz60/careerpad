@@ -4,8 +4,36 @@ import { Field, Modal, WordsField } from '../components/form';
 import { PageHead } from '../components/Workspace';
 import { api, errorText } from '../lib/api';
 import { deadlineLabel } from '../lib/format';
-import type { JobSearch, JobSearchInput, JobSite, SiteResult } from '../lib/types';
+import type { JobGroup, JobPosting, JobSearch, JobSearchInput, JobSite, SiteResult } from '../lib/types';
 import { useAsync } from '../lib/useAsync';
+
+const GROUPS: { id: JobGroup; label: string }[] = [
+  { id: 'board', label: '채용 사이트' },
+  { id: 'public', label: '공공기관' },
+  { id: 'corp', label: '기업 채용' },
+];
+
+type View = 'sites' | 'merged';
+const VIEW_KEY = 'careerpad.jobs.view';
+
+/** 결과 보기(사이트별 · 한 목록)는 이 브라우저에 기억한다 (못 읽으면 사이트별) */
+const loadView = (): View => {
+  try {
+    return localStorage.getItem(VIEW_KEY) === 'merged' ? 'merged' : 'sites';
+  } catch {
+    return 'sites';
+  }
+};
+const saveView = (v: View) => {
+  try {
+    localStorage.setItem(VIEW_KEY, v);
+  } catch {
+    // 저장소를 못 쓰면 이번만 그 보기로
+  }
+};
+
+/** 링크 글자: 검색어를 받지 않는 사이트는 키워드가 비어 있다 */
+const linkLabel = (keyword: string) => keyword || '채용 화면 열기';
 
 /** /me/jobs: 저장한 검색 조건 목록 → 조건을 누르면 사이트별 공고 목록 */
 export const Jobs = () => {
@@ -98,6 +126,11 @@ interface ResultsProps {
 const Results = ({ search, onEdit }: ResultsProps) => {
   const results = useAsync(() => api.jobResults(search.id), [search.id, search.updated_at]);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const [view, setView] = useState<View>(loadView);
+  const pickView = (v: View) => {
+    setView(v);
+    saveView(v);
+  };
   const data = results.data ?? [];
   const total = data.reduce((n, r) => n + r.postings.length, 0);
 
@@ -120,6 +153,14 @@ const Results = ({ search, onEdit }: ResultsProps) => {
           </small>
         </div>
         <span className="grow" />
+        <div className="view-switch" role="group" aria-label="결과 보기">
+          <button type="button" aria-pressed={view === 'sites'} onClick={() => pickView('sites')}>
+            사이트별
+          </button>
+          <button type="button" aria-pressed={view === 'merged'} onClick={() => pickView('merged')}>
+            한 목록
+          </button>
+        </div>
         <button type="button" className="btn ghost small" onClick={results.reload} disabled={results.loading}>
           새로고침
         </button>
@@ -143,14 +184,96 @@ const Results = ({ search, onEdit }: ResultsProps) => {
 
       {results.loading && !results.data && <div className="skeleton" aria-busy="true" />}
 
-      {data
-        .filter((r) => !hidden.has(r.site.id))
-        .map((r) => (
-          <SiteSection key={r.site.id} result={r} />
-        ))}
+      {view === 'merged' && results.data ? (
+        <MergedList results={data.filter((r) => !hidden.has(r.site.id))} />
+      ) : (
+        data.filter((r) => !hidden.has(r.site.id)).map((r) => <SiteSection key={r.site.id} result={r} />)
+      )}
     </>
   );
 };
+
+/** 모든 사이트의 공고를 마감 임박순으로 한 목록에 (마감일이 없거나 모르는 공고는 뒤). 링크만 주는 사이트는 위에 모은다 */
+const MergedList = ({ results }: { results: SiteResult[] }) => {
+  const linkSites = results.filter((r) => !r.site.listable);
+  const problems = results.filter((r) => r.error || (r.note && r.site.listable));
+  const postings = results
+    .flatMap((r) => r.postings.map((p) => ({ p, site: r.site })))
+    .sort((a, b) => (a.p.deadline || '9999').localeCompare(b.p.deadline || '9999'));
+
+  return (
+    <>
+      {linkSites.length > 0 && (
+        <section className="direct-links">
+          <h3>직접 확인할 곳</h3>
+          <ul>
+            {linkSites.map((r) => (
+              <li key={r.site.id}>
+                <b>{r.site.name}</b>
+                <span className="site-links">
+                  {r.links.map((l) => (
+                    <a key={l.keyword || l.url} href={l.url} target="_blank" rel="noopener noreferrer">
+                      {linkLabel(l.keyword)}
+                    </a>
+                  ))}
+                </span>
+                {r.note && <small className="direct-note">{r.note}</small>}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {problems.length > 0 && (
+        <ul className="merged-notes">
+          {problems.map((r) => (
+            <li key={r.site.id} className={r.error ? 'error small' : 'site-note'}>
+              <b>{r.site.name}</b> {r.error ?? r.note}
+            </li>
+          ))}
+        </ul>
+      )}
+      {postings.length === 0 ? (
+        <p className="muted">조건에 맞는 공고가 없어요.</p>
+      ) : (
+        <ul className="postings">
+          {postings.map(({ p, site }) => (
+            <li key={p.id}>
+              <PostingLink posting={p} site={site} showSite />
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
+  );
+};
+
+const PostingLink = ({ posting: p, site, showSite }: { posting: JobPosting; site: JobSite; showSite?: boolean }) => (
+  <a href={p.url} target="_blank" rel="noopener noreferrer" className="posting">
+    <span className="posting-main">
+      <strong>{p.title}</strong>
+      <span className="sub">
+        {showSite && <span className="site-tag">{site.name}</span>}
+        <b>{p.company}</b>
+        {[p.location, p.career].filter(Boolean).map((t) => (
+          <span key={t}>{t}</span>
+        ))}
+      </span>
+      {p.tags.length > 0 && (
+        <span className="chips">
+          {p.tags.slice(0, 6).map((t) => (
+            <span className="chip small" key={t}>
+              {t}
+            </span>
+          ))}
+        </span>
+      )}
+    </span>
+    <span className="posting-side">
+      <DeadlineBadge deadline={p.deadline} known={site.id !== 'wanted'} />
+      <small className="muted">{p.keywords.join(', ')}</small>
+    </span>
+  </a>
+);
 
 interface SiteSectionProps {
   result: SiteResult;
@@ -166,8 +289,8 @@ const SiteSection = ({ result }: SiteSectionProps) => {
         <span className="grow" />
         <span className="site-links">
           {links.map((l) => (
-            <a key={l.keyword} href={l.url} target="_blank" rel="noopener noreferrer">
-              {l.keyword}
+            <a key={l.keyword || l.url} href={l.url} target="_blank" rel="noopener noreferrer">
+              {linkLabel(l.keyword)}
             </a>
           ))}
         </span>
@@ -179,30 +302,7 @@ const SiteSection = ({ result }: SiteSectionProps) => {
         <ul className="postings">
           {postings.map((p) => (
             <li key={p.id}>
-              <a href={p.url} target="_blank" rel="noopener noreferrer" className="posting">
-                <span className="posting-main">
-                  <strong>{p.title}</strong>
-                  <span className="sub">
-                    <b>{p.company}</b>
-                    {[p.location, p.career].filter(Boolean).map((t) => (
-                      <span key={t}>{t}</span>
-                    ))}
-                  </span>
-                  {p.tags.length > 0 && (
-                    <span className="chips">
-                      {p.tags.slice(0, 6).map((t) => (
-                        <span className="chip small" key={t}>
-                          {t}
-                        </span>
-                      ))}
-                    </span>
-                  )}
-                </span>
-                <span className="posting-side">
-                  <DeadlineBadge deadline={p.deadline} known={site.id !== 'wanted'} />
-                  <small className="muted">{p.keywords.join(', ')}</small>
-                </span>
-              </a>
+              <PostingLink posting={p} site={site} />
             </li>
           ))}
         </ul>
@@ -279,17 +379,31 @@ const SearchEditor = ({ search, sites, nextOrder, onClose, onSaved }: SearchEdit
       />
       <fieldset>
         <legend>사이트</legend>
-        <div className="check-grid">
-          {sites.map((s) => (
-            <label key={s.id} className="check">
-              <input type="checkbox" checked={draft.sites.includes(s.id)} onChange={() => toggleSite(s.id)} />
-              <span>
-                {s.name}
-                {!s.listable && <small> · 검색 링크만</small>}
-              </span>
-            </label>
-          ))}
-        </div>
+        {GROUPS.map((g) => {
+          const inGroup = sites.filter((s) => (s.group ?? 'board') === g.id);
+          if (inGroup.length === 0) return null;
+          return (
+            <div key={g.id} className="site-group">
+              <p className="site-group-name">{g.label}</p>
+              <div className="check-grid">
+                {inGroup.map((s) => (
+                  <label key={s.id} className="check">
+                    <input type="checkbox" checked={draft.sites.includes(s.id)} onChange={() => toggleSite(s.id)} />
+                    <span>
+                      {s.name}
+                      {!s.listable && <small> · 링크만</small>}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+        {draft.sites.includes('jobalio') && (
+          <p className="field-hint">
+            잡알리오: 키워드에 <b>정보통신</b>처럼 NCS 분야 이름을 넣으면 그 분야 공고 전체를, 다른 말은 공고 제목에 든 것을 찾아요.
+          </p>
+        )}
       </fieldset>
       <div className="grid-2">
         <Field
@@ -297,7 +411,7 @@ const SearchEditor = ({ search, sites, nextOrder, onClose, onSaved }: SearchEdit
           value={draft.location}
           onChange={(v) => set('location', v)}
           placeholder="서울"
-          hint="시·도나 시·군·구 이름. 쉼표로 여러 곳 (서울, 경기). 원티드 · 점핏 · 사람인은 사이트의 지역 필터로 찾아요"
+          hint="시·도나 시·군·구 이름. 쉼표로 여러 곳 (광주, 전남). 원티드 · 점핏 · 사람인 · 잡알리오는 사이트의 지역 필터로 찾아요 (잡알리오는 시·도까지)"
         />
         <Field
           label="내 경력 (년)"

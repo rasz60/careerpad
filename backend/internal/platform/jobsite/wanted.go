@@ -23,7 +23,7 @@ func NewWanted(client *http.Client, baseURL string) *Wanted {
 }
 
 func (s *Wanted) Site() domain.JobSite {
-	return domain.JobSite{ID: "wanted", Name: "원티드", Listable: true}
+	return domain.JobSite{ID: "wanted", Name: "원티드", Group: domain.JobGroupBoard, Listable: true}
 }
 
 func (s *Wanted) SearchURL(q domain.JobQuery) string {

@@ -11,6 +11,13 @@ import type {
   Project,
   ProjectInput,
   PublicPage,
+  RoadmapDetail,
+  RoadmapDraft,
+  RoadmapHabit,
+  RoadmapInput,
+  RoadmapItem,
+  RoadmapItemInput,
+  RoadmapSummary,
   SiteResult,
 } from './types';
 
@@ -33,7 +40,7 @@ interface RequestOptions {
   body?: unknown;
 }
 
-const request = async <T>(path: string, { method = 'GET', body }: RequestOptions = {}): Promise<T> => {
+const send = async (path: string, { method = 'GET', body }: RequestOptions = {}): Promise<Response> => {
   const { data } = await supabase.auth.getSession();
   const headers: Record<string, string> = {};
   if (body !== undefined) headers['Content-Type'] = 'application/json';
@@ -45,11 +52,17 @@ const request = async <T>(path: string, { method = 'GET', body }: RequestOptions
     headers,
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  if (res.status === 204) return undefined as T;
+  if (!res.ok) {
+    const json = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+    throw new ApiError(res.status, json.error ?? 'unknown', json.message ?? `요청 실패 (${res.status})`);
+  }
+  return res;
+};
 
-  const json = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
-  if (!res.ok) throw new ApiError(res.status, json.error ?? 'unknown', json.message ?? `요청 실패 (${res.status})`);
-  return json as T;
+const request = async <T>(path: string, options: RequestOptions = {}): Promise<T> => {
+  const res = await send(path, options);
+  if (res.status === 204) return undefined as T;
+  return (await res.json().catch(() => ({}))) as T;
 };
 
 const seg = encodeURIComponent;
@@ -81,6 +94,27 @@ export const api = {
   markMessage: (id: string, isRead: boolean) =>
     request<void>(`/me/messages/${seg(id)}`, { method: 'PATCH', body: { is_read: isRead } }),
   deleteMessage: (id: string) => request<void>(`/me/messages/${seg(id)}`, { method: 'DELETE' }),
+
+  roadmaps: () => request<RoadmapSummary[]>('/me/roadmaps'),
+  previewRoadmap: (markdown: string) => request<RoadmapDraft>('/me/roadmaps/preview', { method: 'POST', body: { markdown } }),
+  createRoadmap: (markdown: string) => request<RoadmapDetail>('/me/roadmaps', { method: 'POST', body: { markdown } }),
+  roadmap: (id: string) => request<RoadmapDetail>(`/me/roadmaps/${seg(id)}`),
+  updateRoadmap: (id: string, r: RoadmapInput) => request<RoadmapDetail>(`/me/roadmaps/${seg(id)}`, { method: 'PUT', body: r }),
+  deleteRoadmap: (id: string) => request<void>(`/me/roadmaps/${seg(id)}`, { method: 'DELETE' }),
+  /** md 내보내기 (파일 본문) */
+  roadmapMarkdown: async (id: string) => (await send(`/me/roadmaps/${seg(id)}/markdown`)).text(),
+  addRoadmapItem: (id: string, it: RoadmapItemInput) =>
+    request<RoadmapItem>(`/me/roadmaps/${seg(id)}/items`, { method: 'POST', body: it }),
+  patchRoadmapItem: (id: string, itemId: string, it: RoadmapItemInput) =>
+    request<RoadmapItem>(`/me/roadmaps/${seg(id)}/items/${seg(itemId)}`, { method: 'PATCH', body: it }),
+  deleteRoadmapItem: (id: string, itemId: string) =>
+    request<void>(`/me/roadmaps/${seg(id)}/items/${seg(itemId)}`, { method: 'DELETE' }),
+  addHabit: (id: string, name: string) =>
+    request<RoadmapHabit>(`/me/roadmaps/${seg(id)}/habits`, { method: 'POST', body: { name } }),
+  deleteHabit: (id: string, habitId: string) =>
+    request<void>(`/me/roadmaps/${seg(id)}/habits/${seg(habitId)}`, { method: 'DELETE' }),
+  checkHabitWeek: (id: string, habitId: string, week: string, on: boolean) =>
+    request<RoadmapHabit>(`/me/roadmaps/${seg(id)}/habits/${seg(habitId)}/weeks/${seg(week)}`, { method: on ? 'PUT' : 'DELETE' }),
 };
 
 /** 화면에 보일 에러 문장 */

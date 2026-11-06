@@ -25,6 +25,8 @@ type Config struct {
 
 	// 사람인 Open API 접근 키. 없으면 사람인은 검색 링크만 준다.
 	SaraminAccessKey string
+	// 공공데이터포털 '공공기관 채용정보 조회서비스' 인증키. 없으면 잡알리오는 검색 링크만 준다.
+	JobalioServiceKey string
 
 	SMTPHost     string
 	SMTPPort     string
@@ -44,25 +46,26 @@ type Config struct {
 // Load 는 환경변수에서 설정을 읽는다. 필수값이 없으면 에러를 반환한다.
 func Load() (*Config, error) {
 	cfg := &Config{
-		Host:             env("HOST", "127.0.0.1"),
-		Port:             env("PORT", "8092"),
-		DatabaseURL:      os.Getenv("DATABASE_URL"),
-		AllowOrigin:      env("ALLOW_ORIGIN", "http://localhost:5173"),
-		DBMaxConns:       int32(envInt("DB_MAX_CONNS", 3)),
-		DBQueryMode:      os.Getenv("DB_QUERY_MODE"),
-		SupabaseURL:      strings.TrimRight(os.Getenv("SUPABASE_URL"), "/"),
-		PublicURL:        strings.TrimRight(env("PUBLIC_URL", "https://ae2p.duckdns.org"), "/"),
-		SaraminAccessKey: os.Getenv("SARAMIN_ACCESS_KEY"),
-		SMTPHost:         os.Getenv("SMTP_HOST"),
-		SMTPPort:         env("SMTP_PORT", "587"),
-		SMTPUsername:     os.Getenv("SMTP_USERNAME"),
-		SMTPPassword:     os.Getenv("SMTP_PASSWORD"),
-		MailFrom:         os.Getenv("MAIL_FROM"),
-		SolapiAPIKey:     os.Getenv("SOLAPI_API_KEY"),
-		SolapiAPISecret:  os.Getenv("SOLAPI_API_SECRET"),
-		SMSFrom:          os.Getenv("SMS_FROM"),
-		SMSDailyLimit:    envInt("SMS_DAILY_LIMIT", 20),
-		ContactPerHour:   envInt("CONTACT_PER_HOUR", 5),
+		Host:              env("HOST", "127.0.0.1"),
+		Port:              env("PORT", "8092"),
+		DatabaseURL:       os.Getenv("DATABASE_URL"),
+		AllowOrigin:       env("ALLOW_ORIGIN", "http://localhost:5173"),
+		DBMaxConns:        int32(envInt("DB_MAX_CONNS", 3)),
+		DBQueryMode:       os.Getenv("DB_QUERY_MODE"),
+		SupabaseURL:       strings.TrimRight(os.Getenv("SUPABASE_URL"), "/"),
+		PublicURL:         strings.TrimRight(env("PUBLIC_URL", "https://ae2p.duckdns.org"), "/"),
+		SaraminAccessKey:  os.Getenv("SARAMIN_ACCESS_KEY"),
+		JobalioServiceKey: os.Getenv("JOBALIO_SERVICE_KEY"),
+		SMTPHost:          os.Getenv("SMTP_HOST"),
+		SMTPPort:          env("SMTP_PORT", "587"),
+		SMTPUsername:      os.Getenv("SMTP_USERNAME"),
+		SMTPPassword:      os.Getenv("SMTP_PASSWORD"),
+		MailFrom:          os.Getenv("MAIL_FROM"),
+		SolapiAPIKey:      os.Getenv("SOLAPI_API_KEY"),
+		SolapiAPISecret:   os.Getenv("SOLAPI_API_SECRET"),
+		SMSFrom:           os.Getenv("SMS_FROM"),
+		SMSDailyLimit:     envInt("SMS_DAILY_LIMIT", 20),
+		ContactPerHour:    envInt("CONTACT_PER_HOUR", 5),
 	}
 
 	if cfg.DatabaseURL == "" {

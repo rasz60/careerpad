@@ -27,7 +27,7 @@ func NewSaramin(client *http.Client, baseURL, accessKey string) *Saramin {
 }
 
 func (s *Saramin) Site() domain.JobSite {
-	return domain.JobSite{ID: "saramin", Name: "사람인", Listable: s.accessKey != ""}
+	return domain.JobSite{ID: "saramin", Name: "사람인", Group: domain.JobGroupBoard, Listable: s.accessKey != ""}
 }
 
 func (s *Saramin) SearchURL(q domain.JobQuery) string {

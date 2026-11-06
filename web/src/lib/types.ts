@@ -98,9 +98,13 @@ export interface PublicPage {
   is_owner: boolean;
 }
 
+/** 채용 사이트 묶음: 채용 사이트 · 공공기관 · 기업 채용 */
+export type JobGroup = 'board' | 'public' | 'corp';
+
 export interface JobSite {
   id: string;
   name: string;
+  group: JobGroup;
   /** false 면 목록 없이 사이트 검색 링크만 */
   listable: boolean;
 }
@@ -180,4 +184,88 @@ export interface Message {
   delivered_by: string[];
   is_read: boolean;
   created_at: string;
+}
+
+// ── 개인 로드맵 ──────────────────────────
+
+/** 구간: 항목은 달이 from ~ to 안에 있으면 이 구간에 든다 */
+export interface RoadmapPhase {
+  title: string;
+  /** YYYY-MM */
+  from: string;
+  /** YYYY-MM */
+  to: string;
+  goal: string;
+}
+
+export interface Roadmap {
+  id: string;
+  title: string;
+  lead: string;
+  /** YYYY-MM-DD */
+  starts_on: string;
+  /** YYYY-MM-DD */
+  ends_on: string;
+  /** 분류는 6개까지. 순서대로 탭 색 하나씩 */
+  categories: string[];
+  phases: RoadmapPhase[];
+  created_at: string;
+  updated_at: string;
+}
+
+/** 그 달까지 할 일 하나 */
+export interface RoadmapItem {
+  id: string;
+  /** YYYY-MM */
+  month: string;
+  category: string;
+  body: string;
+  /** 마일스톤(★) */
+  is_key: boolean;
+  /** YYYY-MM-DD, 비면 아직 */
+  done_on: string;
+  sort_order: number;
+}
+
+/** 매주 습관. weeks 는 체크한 ISO 주 (2026-W45) */
+export interface RoadmapHabit {
+  id: string;
+  name: string;
+  weeks: string[];
+  sort_order: number;
+}
+
+export interface RoadmapDetail extends Roadmap {
+  items: RoadmapItem[];
+  habits: RoadmapHabit[];
+}
+
+export interface RoadmapSummary extends Roadmap {
+  total: number;
+  done: number;
+  /** 이번 달보다 앞선 달인데 아직인 항목 */
+  overdue: number;
+}
+
+export type RoadmapInput = Pick<Roadmap, 'title' | 'lead' | 'starts_on' | 'ends_on' | 'categories' | 'phases'>;
+
+export interface RoadmapItemInput {
+  month?: string;
+  category?: string;
+  body?: string;
+  is_key?: boolean;
+  done?: boolean;
+}
+
+/** md 를 읽다 나온 경고 · 오류. line 0 은 파일 전체 */
+export interface ParseMessage {
+  line: number;
+  text: string;
+}
+
+/** md 미리보기 결과. errors 가 있으면 저장할 수 없다 */
+export interface RoadmapDraft {
+  roadmap: RoadmapDetail;
+  warnings: ParseMessage[];
+  errors: ParseMessage[];
 }

@@ -3,15 +3,17 @@ import { Navigate, NavLink, Outlet, useLocation, useOutletContext } from 'react-
 import { api, errorText } from '../lib/api';
 import { daysUntil } from '../lib/format';
 import { useSession } from '../lib/session';
-import type { Message, PublicPage } from '../lib/types';
-import { useAsync } from '../lib/useAsync';
+import { roadmapStatus, seoulToday } from '../lib/roadmap';
+import type { Message, PublicPage, RoadmapSummary } from '../lib/types';
+import { useAsync, type AsyncState } from '../lib/useAsync';
 import { useSwitcher, type PageContext } from './Layout';
 
 /** 메뉴마다 색이 하나씩 (바인더 인덱스 탭). 화면 안의 주 버튼 · 강조도 그 색을 쓴다 */
-export type Tone = 'slate' | 'sage' | 'mustard' | 'peri' | 'teal';
+export type Tone = 'slate' | 'sage' | 'mustard' | 'peri' | 'teal' | 'rose';
 
 const TABS: { to: string; label: string; tone: Tone }[] = [
   { to: '/me', label: '오늘', tone: 'slate' },
+  { to: '/me/roadmap', label: '로드맵', tone: 'rose' },
   { to: '/me/jobs', label: '채용공고', tone: 'sage' },
   { to: '/me/certs', label: '자격증', tone: 'mustard' },
   { to: '/me/resume', label: '이력서', tone: 'peri' },
@@ -22,6 +24,8 @@ export interface WorkspaceContext extends PageContext {
   messages: Message[] | undefined;
   /** 읽음 · 지우기 뒤 메시지 목록 (탭의 새 메시지 수도 같이 바뀐다) */
   setMessages: (next: Message[]) => void;
+  /** 내 로드맵 목록 (탭의 기한 지남 수 · 오늘 화면 · 로드맵 목록이 같이 쓴다). 체크 뒤 reload */
+  roadmaps: AsyncState<RoadmapSummary[]>;
 }
 
 export const useWorkspace = (): WorkspaceContext => useOutletContext<WorkspaceContext>();
@@ -38,6 +42,7 @@ export const Workspace = () => {
   const { pathname } = useLocation();
   const page = useAsync(() => (session ? loadMine() : Promise.reject(new Error('로그인이 필요해요'))), [session?.user.id]);
   const messages = useAsync(() => (session ? api.messages() : Promise.resolve([])), [session?.user.id]);
+  const roadmaps = useAsync(() => (session ? api.roadmaps() : Promise.resolve([])), [session?.user.id]);
   useSwitcher(!!session);
 
   const tab = [...TABS].reverse().find((t) => pathname === t.to || pathname.startsWith(`${t.to}/`)) ?? TABS[0]!;
@@ -55,7 +60,13 @@ export const Workspace = () => {
     .map((c) => daysUntil(c.exam_on))
     .filter((d): d is number => d !== null && d >= 0)
     .sort((a, b) => a - b)[0];
+  // 진행 중인 로드맵의 기한 지난 할 일 수 (로드맵을 못 불러와도 탭은 그대로)
+  const today = seoulToday();
+  const overdue = (roadmaps.data ?? [])
+    .filter((r) => roadmapStatus(r, today) === 'active')
+    .reduce((n, r) => n + r.overdue, 0);
   const notes: Partial<Record<string, ReactNode>> = {
+    '/me/roadmap': overdue > 0 && <span aria-label={`기한 지난 할 일 ${overdue}개`}>{overdue}</span>,
     '/me/certs': nextExam !== undefined && (nextExam === 0 ? 'D-day' : `D-${nextExam}`),
     '/me/inbox': unread > 0 && unread,
   };
@@ -86,7 +97,16 @@ export const Workspace = () => {
             </div>
           ) : page.data ? (
             <Outlet
-              context={{ page: page.data, reload: page.reload, setPage: page.setData, messages: messages.data, setMessages: messages.setData } satisfies WorkspaceContext}
+              context={
+                {
+                  page: page.data,
+                  reload: page.reload,
+                  setPage: page.setData,
+                  messages: messages.data,
+                  setMessages: messages.setData,
+                  roadmaps,
+                } satisfies WorkspaceContext
+              }
             />
           ) : (
             <div className="page-loading" aria-busy="true" />

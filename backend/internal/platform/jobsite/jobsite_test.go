@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/devsixt/careerpad/backend/internal/domain"
@@ -222,5 +223,37 @@ func TestJumpitFiltersDistrict(t *testing.T) {
 	}
 	if len(got) != 1 || got[0].Location != "전남광주 나주시" || !got[0].LocationChecked {
 		t.Errorf("postings = %+v", got)
+	}
+}
+
+func TestSourcesGroupsAndFixedLinks(t *testing.T) {
+	sources := Sources(Options{})
+	groups := map[string][]string{}
+	for _, s := range sources {
+		site := s.Site()
+		if site.Group == "" {
+			t.Errorf("%s: group is empty", site.ID)
+		}
+		groups[site.Group] = append(groups[site.Group], site.ID)
+	}
+	if !slices.Equal(groups[domain.JobGroupPublic], []string{"jobalio"}) || !slices.Equal(groups[domain.JobGroupCorp], []string{"sk", "samsung", "lg"}) {
+		t.Errorf("groups = %v", groups)
+	}
+
+	for _, s := range sources {
+		switch s.Site().ID {
+		case "samsung", "lg", "remember":
+			fixed, ok := s.(domain.FixedLinker)
+			if !ok {
+				t.Fatalf("%s should be a fixed link", s.Site().ID)
+			}
+			if u, note := fixed.FixedLink(); !strings.HasPrefix(u, "https://") || note == "" || s.SearchURL(domain.JobQuery{Keyword: "x"}) != u {
+				t.Errorf("%s fixed link = %q %q", s.Site().ID, u, note)
+			}
+		case "sk":
+			if u := s.SearchURL(domain.JobQuery{Keyword: "데이터 센터"}); u != "https://www.skcareers.com/Recruit?searchText=%EB%8D%B0%EC%9D%B4%ED%84%B0+%EC%84%BC%ED%84%B0" {
+				t.Errorf("sk link = %s", u)
+			}
+		}
 	}
 }

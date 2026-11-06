@@ -119,6 +119,13 @@ func (uc *Job) siteResult(ctx context.Context, source domain.JobSource, search *
 	query := func(kw string) domain.JobQuery {
 		return domain.JobQuery{Keyword: kw, Location: search.Location, CareerYears: search.CareerYears}
 	}
+	// 검색어를 받지 않는 사이트는 키워드마다 같은 링크를 만들지 않고 채용 첫 화면 하나만 준다
+	if fixed, ok := source.(domain.FixedLinker); ok {
+		u, note := fixed.FixedLink()
+		res.Links = append(res.Links, domain.KeywordLink{Keyword: "", URL: u})
+		res.Note = note
+		return res
+	}
 	for _, kw := range search.Keywords {
 		res.Links = append(res.Links, domain.KeywordLink{Keyword: kw, URL: source.SearchURL(query(kw))})
 	}

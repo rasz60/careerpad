@@ -32,11 +32,24 @@ type JobSearchRepository interface {
 	Delete(ctx context.Context, userID, id string) error
 }
 
+// 채용 사이트 묶음 (검색 조건 편집 화면에서 묶어 보여 준다).
+const (
+	JobGroupBoard  = "board"  // 채용 사이트 (원티드 · 사람인 …)
+	JobGroupPublic = "public" // 공공기관 (잡알리오)
+	JobGroupCorp   = "corp"   // 기업 채용 사이트 (SK · 삼성 · LG)
+)
+
 // JobSite 는 채용 사이트 정보다. Listable 이 false 면 목록 대신 사이트 검색 링크만 준다.
 type JobSite struct {
 	ID       string `json:"id"`
 	Name     string `json:"name"`
+	Group    string `json:"group"`
 	Listable bool   `json:"listable"`
+}
+
+// FixedLinker 는 검색어를 주소로 받지 않는 사이트다. 키워드마다 링크를 만들지 않고 채용 첫 화면 하나와 안내만 준다.
+type FixedLinker interface {
+	FixedLink() (url, note string)
 }
 
 // JobPosting 은 사이트에서 가져온 공고 한 건이다. 경력 범위가 없으면(무관·모름) nil.

@@ -238,3 +238,26 @@ func TestNormalizeJobSearch(t *testing.T) {
 		}
 	}
 }
+
+// fixedSource 는 검색어를 주소로 받지 않는 사이트다 (domain.FixedLinker).
+type fixedSource struct{ fakeSource }
+
+func (f *fixedSource) FixedLink() (string, string) {
+	return "https://careers.example.com/", "직접 입력"
+}
+
+func TestResultsFixedLinkGivesOneLink(t *testing.T) {
+	fixed := &fixedSource{fakeSource{site: domain.JobSite{ID: "corp", Listable: false}}}
+	repo := &fakeSearches{search: domain.JobSearch{Keywords: []string{"데이터", "인프라"}, Sites: []string{"corp"}, Location: "나주"}}
+	results, err := NewJob(repo, []domain.JobSource{fixed}).Results(context.Background(), "u", "s")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := results[0]
+	if len(r.Links) != 1 || r.Links[0].URL != "https://careers.example.com/" || r.Links[0].Keyword != "" || r.Note != "직접 입력" {
+		t.Errorf("result = %+v, want one link with the site's note", r)
+	}
+	if fixed.calls.Load() != 0 {
+		t.Error("fixed link site should not be searched")
+	}
+}

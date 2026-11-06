@@ -6,13 +6,22 @@ import (
 )
 
 // 근무지 글자("나주", "서울 강남구", "서울, 경기")를 사이트가 받는 지역 코드로 바꾼다.
-// 표(regions_data.go)는 원티드의 지역 목록이고, 시·도마다 사람인 · 점핏의 1차 지역 코드를 붙여 두었다.
+// 표(regions_data.go)는 원티드의 지역 목록이고, 시·도마다 사람인 · 점핏의 1차 지역 코드와 잡알리오 근무지역 코드를 붙여 두었다.
 
 type province struct {
 	Wanted    string // 원티드 시·도 키 (seoul) — 전체는 seoul.all
 	Saramin   string // 사람인 · 점핏 1차 지역 코드 (101000)
 	Names     []string
 	Districts []district
+}
+
+// jobalioRegions 는 원티드 시·도 키 → 잡알리오 근무지역 코드(job.alio.go.kr 검색 화면, 2026-11 확인)다.
+// 잡알리오는 광주 · 전남을 '전남광주통합특별시'(R3027) 하나로 묶는다.
+var jobalioRegions = map[string]string{
+	"seoul": "R3010", "incheon": "R3011", "daejeon": "R3012", "daegu": "R3013", "busan": "R3014",
+	"ulsan": "R3016", "gyeonggi": "R3017", "gangwon": "R3018", "s-chungcheong": "R3019", "n-chungcheong": "R3020",
+	"n-gyeongsang": "R3021", "s-gyeongsang": "R3022", "gwangju": "R3027", "s-jeolla": "R3027", "n-jeolla": "R3024",
+	"jeju": "R3025", "sejong": "R3026",
 }
 
 type district struct {
@@ -24,6 +33,7 @@ type district struct {
 type region struct {
 	wanted  []string // 원티드 locations 값
 	saramin []string // 사람인 · 점핏 지역 코드
+	jobalio []string // 잡알리오 근무지역 코드 (시·도 단위)
 	// 공고의 근무지 글자와 맞춰 볼 이름 (시·군·구는 그 이름, 시·도 전체는 시·도의 여러 이름)
 	words []string
 }
@@ -103,6 +113,7 @@ func resolveRegion(location string) region {
 			for _, d := range dists {
 				r.wanted = appendNew(r.wanted, d)
 				r.saramin = appendNew(r.saramin, distProv[d].Saramin)
+				r.jobalio = appendNew(r.jobalio, jobalioRegions[distProv[d].Wanted])
 				r.words = appendNew(r.words, regionWord(distName[d]))
 			}
 			continue
@@ -110,6 +121,7 @@ func resolveRegion(location string) region {
 		for _, p := range provs {
 			r.wanted = appendNew(r.wanted, p.Wanted+".all")
 			r.saramin = appendNew(r.saramin, p.Saramin)
+			r.jobalio = appendNew(r.jobalio, jobalioRegions[p.Wanted])
 			for _, n := range p.Names {
 				r.words = appendNew(r.words, regionWord(n))
 			}
