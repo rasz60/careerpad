@@ -66,6 +66,8 @@ export interface Profile {
   links: Link[];
   resume: Resume;
   updated_at: string;
+  /** 공용 테스터 계정 (P-0004). 채용공고 · 메시지를 쓸 수 없다. 서버가 내 프로필 응답에만 붙인다 */
+  is_tester?: boolean;
 }
 
 export type ProjectKind = 'work' | 'personal';

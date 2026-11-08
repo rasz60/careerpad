@@ -55,6 +55,7 @@ func run() error {
 		searches = postgres.NewJobSearchRepository(pool)
 		contacts = postgres.NewContactRepository(pool)
 		roadmaps = postgres.NewRoadmapRepository(pool)
+		testers  = postgres.NewTesterRepository(pool)
 
 		mailer = notify.NewSMTPMailer(notify.SMTPConfig{
 			Host: cfg.SMTPHost, Port: cfg.SMTPPort, Username: cfg.SMTPUsername, Password: cfg.SMTPPassword, From: cfg.MailFrom,
@@ -77,8 +78,9 @@ func run() error {
 		Job:      usecase.NewJob(searches, sources),
 		Contact: usecase.NewContact(profiles, contacts, mailer, sms,
 			ratelimit.New(cfg.ContactPerHour, time.Hour),
-			usecase.ContactOptions{SMSDailyLimit: cfg.SMSDailyLimit, PublicURL: cfg.PublicURL}),
+			usecase.ContactOptions{SMSDailyLimit: cfg.SMSDailyLimit, PublicURL: cfg.PublicURL, Testers: testers}),
 		Roadmap: usecase.NewRoadmap(roadmaps),
+		Tester:  usecase.NewTester(testers),
 	})
 
 	server := &http.Server{

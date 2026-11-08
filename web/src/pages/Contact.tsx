@@ -3,7 +3,7 @@ import { Navigate } from 'react-router-dom';
 import { Field, TextArea, Toggle } from '../components/form';
 import { usePage } from '../components/Layout';
 import { Section } from '../components/Section';
-import { PageHead, useWorkspace } from '../components/Workspace';
+import { PageHead, TesterBlocked, useWorkspace } from '../components/Workspace';
 import { api, errorText } from '../lib/api';
 import { dateTimeLabel, phoneLabel } from '../lib/format';
 import type { ContactInput, ContactSettings, Message, Profile } from '../lib/types';
@@ -27,7 +27,9 @@ export const ContactSection = ({ profile: p }: { profile: Profile }) => (
 
 /** /me/inbox: 이력서를 보고 남긴 메시지 + 알림 받을 곳 */
 export const InboxPage = () => {
-  const { messages } = useWorkspace();
+  const { messages, isTester } = useWorkspace();
+  // 테스터 계정(P-0004)은 메시지를 쓸 수 없다 (탭도 숨긴다)
+  if (isTester) return <TesterBlocked title="메시지" />;
   const unread = (messages ?? []).filter((m) => !m.is_read).length;
   return (
     <>

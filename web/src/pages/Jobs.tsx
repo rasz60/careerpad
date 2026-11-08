@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Field, Modal, WordsField } from '../components/form';
-import { PageHead } from '../components/Workspace';
+import { PageHead, TesterBlocked, useWorkspace } from '../components/Workspace';
 import { api, errorText } from '../lib/api';
 import { deadlineLabel } from '../lib/format';
 import type { JobGroup, JobPosting, JobSearch, JobSearchInput, JobSite, SiteResult } from '../lib/types';
@@ -35,8 +35,11 @@ const saveView = (v: View) => {
 /** 링크 글자: 검색어를 받지 않는 사이트는 키워드가 비어 있다 */
 const linkLabel = (keyword: string) => keyword || '채용 화면 열기';
 
-/** /me/jobs: 저장한 검색 조건 목록 → 조건을 누르면 사이트별 공고 목록 */
-export const Jobs = () => {
+/** /me/jobs: 테스터 계정(P-0004)은 쓸 수 없다 (탭도 숨긴다) */
+export const Jobs = () => (useWorkspace().isTester ? <TesterBlocked title="채용공고" /> : <JobsBoard />);
+
+/** 저장한 검색 조건 목록 → 조건을 누르면 사이트별 공고 목록 */
+const JobsBoard = () => {
   const [params, setParams] = useSearchParams();
   const searches = useAsync(() => api.jobSearches(), []);
   const sites = useAsync(() => api.jobSites(), []);

@@ -12,8 +12,9 @@ const EXPIRY_NOTICE_DAYS = 120;
 
 /** /me — 수첩의 오늘 쪽: 다가오는 시험 · 이번 달 로드맵 · 새 메시지 · 저장한 검색 · 이력서 상태 */
 export const Today = () => {
-  const { page, messages } = useWorkspace();
-  const searches = useAsync(() => api.jobSearches(), []);
+  const { page, messages, isTester } = useWorkspace();
+  // 테스터 계정은 채용공고 · 메시지를 쓸 수 없다 (P-0004)
+  const searches = useAsync(() => (isTester ? Promise.resolve([]) : api.jobSearches()), [isTester]);
   const p = page.profile;
   const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' });
   const unread = (messages ?? []).filter((m) => !m.is_read);
@@ -30,43 +31,47 @@ export const Today = () => {
           <RoadmapThisMonth today={today} />
         </Block>
 
-        <Block tone="teal" title="새 메시지" to="/me/inbox" more="메시지 보기">
-          {unread.length === 0 ? (
-            <p className="quiet">새 메시지가 없어요.</p>
-          ) : (
+        {!isTester && (
+          <Block tone="teal" title="새 메시지" to="/me/inbox" more="메시지 보기">
+            {unread.length === 0 ? (
+              <p className="quiet">새 메시지가 없어요.</p>
+            ) : (
+              <ul className="peek">
+                {unread.slice(0, 3).map((m) => (
+                  <li key={m.id}>
+                    <Link to="/me/inbox">
+                      <strong>{m.sender_name}</strong>
+                      <span className="peek-body">{m.body}</span>
+                      <small className="muted">{dateTimeLabel(m.created_at)}</small>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Block>
+        )}
+
+        {!isTester && (
+          <Block tone="sage" title="저장한 공고 검색" to="/me/jobs" more="채용공고 보기">
+            {searches.error ? <p className="error small">{errorText(searches.error)}</p> : null}
+            {searches.data && searches.data.length === 0 && (
+              <p className="quiet">
+                키워드와 사이트로 검색 조건을 만들어 두면 누를 때마다 새 공고를 모아 줘요.{' '}
+                <Link to="/me/jobs">조건 만들기</Link>
+              </p>
+            )}
             <ul className="peek">
-              {unread.slice(0, 3).map((m) => (
-                <li key={m.id}>
-                  <Link to="/me/inbox">
-                    <strong>{m.sender_name}</strong>
-                    <span className="peek-body">{m.body}</span>
-                    <small className="muted">{dateTimeLabel(m.created_at)}</small>
+              {(searches.data ?? []).slice(0, 4).map((s) => (
+                <li key={s.id}>
+                  <Link to={`/me/jobs?s=${s.id}`}>
+                    <strong>{s.name}</strong>
+                    <span className="peek-body">{s.keywords.join(', ')}</span>
                   </Link>
                 </li>
               ))}
             </ul>
-          )}
-        </Block>
-
-        <Block tone="sage" title="저장한 공고 검색" to="/me/jobs" more="채용공고 보기">
-          {searches.error ? <p className="error small">{errorText(searches.error)}</p> : null}
-          {searches.data && searches.data.length === 0 && (
-            <p className="quiet">
-              키워드와 사이트로 검색 조건을 만들어 두면 누를 때마다 새 공고를 모아 줘요.{' '}
-              <Link to="/me/jobs">조건 만들기</Link>
-            </p>
-          )}
-          <ul className="peek">
-            {(searches.data ?? []).slice(0, 4).map((s) => (
-              <li key={s.id}>
-                <Link to={`/me/jobs?s=${s.id}`}>
-                  <strong>{s.name}</strong>
-                  <span className="peek-body">{s.keywords.join(', ')}</span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </Block>
+          </Block>
+        )}
 
         <Block tone="peri" title="이력서" to="/me/resume" more="이력서 보기">
           <ResumeStatus profile={p} projects={page.projects.length} />

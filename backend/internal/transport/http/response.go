@@ -26,6 +26,11 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 	}
 }
 
+const (
+	testerLockedMessage  = "기본 데이터는 테스터가 바꿀 수 없어요"
+	testerBlockedMessage = "테스터 계정에서는 쓸 수 없는 기능이에요"
+)
+
 // writeError 는 도메인 센티널 에러를 HTTP 상태 코드로 매핑한다.
 // 검증·충돌 에러는 유스케이스가 만든 한국어 문장을 그대로 보여 주고, 나머지는 정해진 문장을 쓴다.
 func writeError(w http.ResponseWriter, err error) {
@@ -36,6 +41,11 @@ func writeError(w http.ResponseWriter, err error) {
 		sentinel error
 	)
 	switch {
+	// 테스터 계정(P-0004): 문장이 정해져 있다
+	case errors.Is(err, domain.ErrTesterLocked):
+		status, code, message = http.StatusForbidden, "tester_locked", testerLockedMessage
+	case errors.Is(err, domain.ErrTesterBlocked):
+		status, code, message = http.StatusForbidden, "tester_blocked", testerBlockedMessage
 	case errors.Is(err, domain.ErrInvalidInput):
 		status, code, sentinel = http.StatusBadRequest, "invalid_input", domain.ErrInvalidInput
 		message = "입력값을 확인해 주세요."

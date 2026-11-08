@@ -107,6 +107,10 @@ func translate(op string, err error) error {
 			return fmt.Errorf("%s: %s: %w", op, pgErr.ConstraintName, domain.ErrInvalidInput)
 		case "22P02": // invalid_text_representation — 주소의 id 가 uuid 모양이 아니면 그런 항목은 없다
 			return fmt.Errorf("%s: %w", op, domain.ErrNotFound)
+		case testerLockedCode: // 테스터가 기본 데이터를 바꾸려 함 (migrations/0003_tester.sql)
+			return fmt.Errorf("%s: %w", op, domain.ErrTesterLocked)
+		case testerBlockedCode: // 테스터에게 막은 기능
+			return fmt.Errorf("%s: %w", op, domain.ErrTesterBlocked)
 		}
 	}
 	return fmt.Errorf("%s: %w", op, err)

@@ -13,6 +13,9 @@ ae:p 포털(`https://ae2p.duckdns.org`)의 **커리어++** 앱입니다. 웹은 
 | 이력서 (`resume`) | 인적 사항 · 소개 · 경력 · 프로젝트 · 학력 · 기술 편집, PDF 저장, 공개 링크 |
 | 메시지 (`inbox`) | 공개 이력서의 '메시지 남기기'로 온 연락 + 알림 받을 곳(메일 · SMS) |
 
+포털의 '테스터로 입장하기'로 들어온 **테스터 계정**은 관리자가 넣어 둔 기본 데이터를 바꿀 수 없고, 새로 만든 데이터는 로그아웃하면 지워집니다.
+채용공고 · 메시지 탭은 보이지 않습니다.
+
 공개 페이지(`/:slug`)는 이력서 한 장 + 메시지 남기기 폼입니다. 주인이 열면 위에 '작업 공간으로 돌아가기' 띠가 붙고,
 나머지는 방문자와 똑같이 보입니다 (비공개 프로젝트 · 준비 중인 자격은 빠진다). 예전 주소 `/:slug/jobs` · `/:slug/inbox` 는 `/me/…` 로 넘어갑니다.
 
@@ -71,7 +74,7 @@ careerpad/
 │  │  ├─ platform/                  # auth(Supabase JWT), jobsite(채용 사이트), notify(메일·SMS), ratelimit
 │  │  ├─ transport/http/            # 라우터 · 핸들러 · 미들웨어
 │  │  └─ config/
-│  └─ migrations/0001_career_schema.sql · 0002_roadmap.sql
+│  └─ migrations/0001_career_schema.sql · 0002_roadmap.sql · 0003_tester.sql
 ├─ web/                             # React + Vite + TS
 │  └─ src/ pages(Today · Roadmap · RoadmapDetail · Jobs · Certificates · About · Projects · Contact · Home) · components(Workspace · Layout) · lib
 ├─ scripts/deploy.sh                # 서버 배포 (GitHub Actions 가 호출)
@@ -127,7 +130,8 @@ GitHub Actions 러너가 만들고, 묶음(tar.gz)을 SSH 표준입력으로 보
 `deploy.sh` 는 전체 10분 제한(`DEPLOY_TIMEOUT`) · 동시 배포 잠금이 있습니다. 서버에 Go 는 필요 없습니다.
 
 1. **DB**: Supabase SQL Editor 에서 [backend/migrations/0001_career_schema.sql](backend/migrations/0001_career_schema.sql) →
-   [0002_roadmap.sql](backend/migrations/0002_roadmap.sql) 순서로 실행 (새 마이그레이션은 push(배포) 전에 실행한다)
+   [0002_roadmap.sql](backend/migrations/0002_roadmap.sql) → [0003_tester.sql](backend/migrations/0003_tester.sql) 순서로 실행 (새 마이그레이션은 push(배포) 전에 실행한다.
+   0003 은 먼저 Database → Extensions 에서 `pg_cron` 을 켠다)
 2. **서버에 받기**: `git clone git@github-careerpad:rasz60/careerpad.git ~/careerpad` (읽기 전용 Deploy key. 공개 저장소면 https 로 받아도 된다)
 3. **`.env`**: 루트 `.env`(백엔드)만. 웹 값은 서버가 아니라 GitHub 저장소 **Variables** 에 `VITE_SUPABASE_URL` · `VITE_SUPABASE_ANON_KEY`
 4. **Caddy**: 포털 저장소 `deploy/Caddyfile` 의 `/career/` · `/api/career/` 블록 반영 → `sudo systemctl reload caddy`

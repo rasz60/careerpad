@@ -17,13 +17,14 @@ type Deps struct {
 	Job      *usecase.Job
 	Contact  *usecase.Contact
 	Roadmap  *usecase.Roadmap
+	Tester   *usecase.Tester
 }
 
 // NewRouter 는 Go 1.22 ServeMux 패턴 라우팅으로 전체 API 를 구성한다.
 // Caddy 가 /api/career/* 의 접두어를 떼고 넘기므로 여기서는 /api/v1/... 로 받는다.
 func NewRouter(d Deps) http.Handler {
 	public := NewPublicHandler(d.Profile, d.Contact)
-	me := NewMeHandler(d.Profile, d.Project, d.Job, d.Contact)
+	me := NewMeHandler(d.Profile, d.Project, d.Job, d.Contact, d.Tester)
 	roadmap := NewRoadmapHandler(d.Roadmap)
 
 	mux := http.NewServeMux()
@@ -39,6 +40,10 @@ func NewRouter(d Deps) http.Handler {
 	protected := func(pattern string, handler http.HandlerFunc) {
 		mux.HandleFunc(pattern, requireAuth(d.Verifier, handler))
 	}
+	// 테스터 계정(P-0004)에게 막은 기능: 채용공고 · 메시지 · 메시지 알림 설정
+	blocked := func(pattern string, handler http.HandlerFunc) {
+		protected(pattern, blockTester(d.Tester, handler))
+	}
 	protected("GET /api/v1/me/profile", me.Profile)
 	protected("PUT /api/v1/me/profile", me.UpdateProfile)
 
@@ -47,18 +52,21 @@ func NewRouter(d Deps) http.Handler {
 	protected("PUT /api/v1/me/projects/{id}", me.UpdateProject)
 	protected("DELETE /api/v1/me/projects/{id}", me.DeleteProject)
 
-	protected("GET /api/v1/me/job-sites", me.JobSites)
-	protected("GET /api/v1/me/job-searches", me.JobSearches)
-	protected("POST /api/v1/me/job-searches", me.CreateJobSearch)
-	protected("PUT /api/v1/me/job-searches/{id}", me.UpdateJobSearch)
-	protected("DELETE /api/v1/me/job-searches/{id}", me.DeleteJobSearch)
-	protected("GET /api/v1/me/job-searches/{id}/results", me.JobResults)
+	blocked("GET /api/v1/me/job-sites", me.JobSites)
+	blocked("GET /api/v1/me/job-searches", me.JobSearches)
+	blocked("POST /api/v1/me/job-searches", me.CreateJobSearch)
+	blocked("PUT /api/v1/me/job-searches/{id}", me.UpdateJobSearch)
+	blocked("DELETE /api/v1/me/job-searches/{id}", me.DeleteJobSearch)
+	blocked("GET /api/v1/me/job-searches/{id}/results", me.JobResults)
 
-	protected("GET /api/v1/me/contact-settings", me.ContactSettings)
-	protected("PUT /api/v1/me/contact-settings", me.SaveContactSettings)
-	protected("GET /api/v1/me/messages", me.Messages)
-	protected("PATCH /api/v1/me/messages/{id}", me.MarkMessage)
-	protected("DELETE /api/v1/me/messages/{id}", me.DeleteMessage)
+	blocked("GET /api/v1/me/contact-settings", me.ContactSettings)
+	blocked("PUT /api/v1/me/contact-settings", me.SaveContactSettings)
+	blocked("GET /api/v1/me/messages", me.Messages)
+	blocked("PATCH /api/v1/me/messages/{id}", me.MarkMessage)
+	blocked("DELETE /api/v1/me/messages/{id}", me.DeleteMessage)
+
+	// 포털이 테스터 로그아웃 직전에 부른다. 테스터가 아니면 아무것도 지우지 않는다
+	protected("POST /api/v1/me/tester/reset", me.ResetTester)
 
 	// 개인 로드맵 (md 가져오기 · 체크 · 매주 습관)
 	protected("GET /api/v1/me/roadmaps", roadmap.List)

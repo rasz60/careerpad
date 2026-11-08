@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Navigate, NavLink, Outlet, useLocation, useOutletContext } from 'react-router-dom';
 import { api, errorText } from '../lib/api';
 import { daysUntil } from '../lib/format';
@@ -10,6 +10,9 @@ import { useSwitcher, type PageContext } from './Layout';
 
 /** 메뉴마다 색이 하나씩 (바인더 인덱스 탭). 화면 안의 주 버튼 · 강조도 그 색을 쓴다 */
 export type Tone = 'slate' | 'sage' | 'mustard' | 'peri' | 'teal' | 'rose';
+
+/** 공용 테스터 계정(P-0004)에게 숨기는 탭 (서버도 403 으로 막는다) */
+const TESTER_HIDDEN = new Set(['/me/jobs', '/me/inbox']);
 
 const TABS: { to: string; label: string; tone: Tone }[] = [
   { to: '/me', label: '오늘', tone: 'slate' },
@@ -26,13 +29,16 @@ export interface WorkspaceContext extends PageContext {
   setMessages: (next: Message[]) => void;
   /** 내 로드맵 목록 (탭의 기한 지남 수 · 오늘 화면 · 로드맵 목록이 같이 쓴다). 체크 뒤 reload */
   roadmaps: AsyncState<RoadmapSummary[]>;
+  /** 공용 테스터 계정이면 true. 채용공고 · 메시지를 숨긴다 */
+  isTester: boolean;
 }
 
 export const useWorkspace = (): WorkspaceContext => useOutletContext<WorkspaceContext>();
 
 /** 내 공간을 불러온다: 내 프로필의 주소로 공개 페이지 응답을 받으면 비공개 항목까지 온다 */
-const loadMine = async (): Promise<PublicPage> => {
+const loadMine = async (onTester: (isTester: boolean) => void): Promise<PublicPage> => {
   const me = await api.myProfile();
+  onTester(me.is_tester === true);
   return api.publicPage(me.slug);
 };
 
@@ -40,7 +46,8 @@ const loadMine = async (): Promise<PublicPage> => {
 export const Workspace = () => {
   const { ready, session } = useSession();
   const { pathname } = useLocation();
-  const page = useAsync(() => (session ? loadMine() : Promise.reject(new Error('로그인이 필요해요'))), [session?.user.id]);
+  const [isTester, setIsTester] = useState(false);
+  const page = useAsync(() => (session ? loadMine(setIsTester) : Promise.reject(new Error('로그인이 필요해요'))), [session?.user.id]);
   const messages = useAsync(() => (session ? api.messages() : Promise.resolve([])), [session?.user.id]);
   const roadmaps = useAsync(() => (session ? api.roadmaps() : Promise.resolve([])), [session?.user.id]);
   useSwitcher(!!session);
@@ -80,7 +87,7 @@ export const Workspace = () => {
       </header>
       <div className="binder">
         <nav className="tabs no-print" aria-label="메뉴">
-          {TABS.map((t) => (
+          {TABS.filter((t) => !(isTester && TESTER_HIDDEN.has(t.to))).map((t) => (
             <NavLink key={t.to} to={t.to} end={t.to === '/me'} className="tab" data-tone={t.tone}>
               <span>{t.label}</span>
               {notes[t.to] && <span className="tab-note">{notes[t.to]}</span>}
@@ -105,6 +112,7 @@ export const Workspace = () => {
                   messages: messages.data,
                   setMessages: messages.setData,
                   roadmaps,
+                  isTester,
                 } satisfies WorkspaceContext
               }
             />
@@ -116,6 +124,14 @@ export const Workspace = () => {
     </div>
   );
 };
+
+/** 테스터 계정이 채용공고 · 메시지 주소로 직접 들어왔을 때 */
+export const TesterBlocked = ({ title }: { title: string }) => (
+  <>
+    <PageHead title={title} sub="테스터 계정에서는 쓸 수 없는 기능이에요." />
+    <p className="quiet">초대받은 계정으로 로그인하면 쓸 수 있어요. 로드맵 · 자격증 · 이력서는 테스터 계정에서도 써 볼 수 있어요.</p>
+  </>
+);
 
 interface PageHeadProps {
   title: string;

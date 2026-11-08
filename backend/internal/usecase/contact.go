@@ -25,13 +25,16 @@ type Contact struct {
 	limiter   RateLimiter
 	smsDaily  int    // 하루에 보낼 SMS 알림 상한 (문자는 돈이 든다)
 	publicURL string // 알림에 넣을 사이트 주소 (https://ae2p.duckdns.org)
-	now       func() time.Time
+	// 공용 테스터 계정에는 메시지를 남길 수 없다 (P-0004). nil 이면 확인하지 않는다
+	testers domain.TesterRepository
+	now     func() time.Time
 }
 
 // ContactOptions 는 Contact 의 설정값이다.
 type ContactOptions struct {
 	SMSDailyLimit int
 	PublicURL     string
+	Testers       domain.TesterRepository
 }
 
 func NewContact(
@@ -44,7 +47,7 @@ func NewContact(
 ) *Contact {
 	return &Contact{
 		profiles: profiles, contacts: contacts, mailer: mailer, sms: sms, limiter: limiter,
-		smsDaily: opts.SMSDailyLimit, publicURL: strings.TrimRight(opts.PublicURL, "/"), now: time.Now,
+		smsDaily: opts.SMSDailyLimit, publicURL: strings.TrimRight(opts.PublicURL, "/"), testers: opts.Testers, now: time.Now,
 	}
 }
 
@@ -75,6 +78,15 @@ func (uc *Contact) Send(ctx context.Context, slug string, in ContactInput, sende
 	}
 	if !owner.IsPublic {
 		return fmt.Errorf("contact: profile %q is private: %w", slug, domain.ErrNotFound)
+	}
+	if uc.testers != nil {
+		isTester, err := uc.testers.IsTester(ctx, owner.UserID)
+		if err != nil {
+			return err
+		}
+		if isTester {
+			return fmt.Errorf("contact: %q is the tester account: %w", slug, domain.ErrTesterBlocked)
+		}
 	}
 	if !uc.limiter.Allow(senderIP) {
 		return fmt.Errorf("잠시 뒤에 다시 보내 주세요: %w", domain.ErrTooManyRequests)

@@ -13,10 +13,32 @@ type MeHandler struct {
 	project *usecase.Project
 	job     *usecase.Job
 	contact *usecase.Contact
+	tester  *usecase.Tester
 }
 
-func NewMeHandler(profile *usecase.Profile, project *usecase.Project, job *usecase.Job, contact *usecase.Contact) *MeHandler {
-	return &MeHandler{profile: profile, project: project, job: job, contact: contact}
+func NewMeHandler(profile *usecase.Profile, project *usecase.Project, job *usecase.Job, contact *usecase.Contact, tester *usecase.Tester) *MeHandler {
+	return &MeHandler{profile: profile, project: project, job: job, contact: contact, tester: tester}
+}
+
+// profileResponse 는 내 프로필 + 테스터 여부. 웹이 테스터에게 채용공고 · 메시지 탭을 숨기는 데 쓴다
+type profileResponse struct {
+	*domain.Profile
+	IsTester bool `json:"is_tester"`
+}
+
+func (h *MeHandler) withTester(r *http.Request, p *domain.Profile) (profileResponse, error) {
+	isTester, err := h.tester.IsTester(r.Context(), userID(r))
+	return profileResponse{Profile: p, IsTester: isTester}, err
+}
+
+// ResetTester 는 POST /me/tester/reset — 테스터가 새로 만든 데이터를 지운다 (기본 데이터는 남는다).
+func (h *MeHandler) ResetTester(w http.ResponseWriter, r *http.Request) {
+	n, err := h.tester.Reset(r.Context(), userID(r))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]int{"deleted": n})
 }
 
 // ── 프로필 ───────────────────────────────
@@ -28,7 +50,12 @@ func (h *MeHandler) Profile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, p)
+	res, err := h.withTester(r, p)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
 }
 
 func (h *MeHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
@@ -42,7 +69,12 @@ func (h *MeHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, p)
+	res, err := h.withTester(r, p)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
 }
 
 // ── 프로젝트 ─────────────────────────────
