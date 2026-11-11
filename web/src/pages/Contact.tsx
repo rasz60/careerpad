@@ -76,8 +76,8 @@ const ContactForm = ({ slug, disabled }: ContactFormProps) => {
 
   if (state === 'sent') {
     return (
-      <div className="sent" role="status">
-        <h3>보냈어요</h3>
+      <div className="sent">
+        <h3>보냈어요 ✓</h3>
         <p className="muted">확인하는 대로 남겨 주신 연락처로 답장드릴게요.</p>
         <button type="button" className="btn ghost small" onClick={() => setState('idle')}>
           하나 더 보내기

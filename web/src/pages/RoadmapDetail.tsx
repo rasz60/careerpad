@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Field, Icon, Modal, RowList, Toggle, WordsField } from '../components/form';
+import { Field, Modal, RowList, Toggle, WordsField } from '../components/form';
 import { PageHead, useWorkspace } from '../components/Workspace';
 import { api, errorText } from '../lib/api';
 import {
@@ -501,7 +501,7 @@ const ItemRow = ({ item: it, categories, cur, onToggle, onDelete, onEdit }: Item
             </span>
           )}
           {it.is_key && (
-            <span className="star" role="img" aria-label="마일스톤">
+            <span className="star" aria-label="마일스톤">
               ★
             </span>
           )}
@@ -521,7 +521,7 @@ const ItemRow = ({ item: it, categories, cur, onToggle, onDelete, onEdit }: Item
           aria-label={confirming ? '한 번 더 누르면 지워요' : '할 일 지우기'}
           onClick={() => (confirming ? onDelete(it) : setConfirming(true))}
         >
-          {confirming ? '지울까요?' : <Icon name="close" size={15} />}
+          {confirming ? '지울까요?' : '✕'}
         </button>
       </span>
     </li>

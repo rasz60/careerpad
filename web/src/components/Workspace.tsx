@@ -80,9 +80,6 @@ export const Workspace = () => {
 
   return (
     <div className="desk" data-tone={tab.tone}>
-      <a className="skip-link no-print" href="#sheet">
-        본문으로 건너뛰기
-      </a>
       <header className="desk-head no-print">
         <aep-switcher mode="inline" className="switcher" />
         <span className="desk-brand">커리어++</span>
@@ -97,7 +94,7 @@ export const Workspace = () => {
             </NavLink>
           ))}
         </nav>
-        <main className="sheet" id="sheet" tabIndex={-1}>
+        <main className="sheet">
           {page.error ? (
             <div className="sheet-error">
               <p>{errorText(page.error)}</p>

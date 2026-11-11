@@ -276,11 +276,7 @@ const RoadmapMonthCard = ({ roadmap: d, today, onChange }: { roadmap: RoadmapDet
                         {it.category}
                       </span>
                     )}
-                    {it.is_key && (
-                      <span className="star" role="img" aria-label="마일스톤">
-                        ★
-                      </span>
-                    )}
+                    {it.is_key && <span className="star">★</span>}
                     {it.body}
                   </span>
                 </label>
