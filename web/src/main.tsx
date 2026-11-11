@@ -13,8 +13,7 @@ import { Projects } from './pages/Projects';
 import { RoadmapList } from './pages/Roadmap';
 import { RoadmapDetailPage } from './pages/RoadmapDetail';
 import { Today } from './pages/Today';
-import '@fontsource/barlow-condensed/500.css';
-import '@fontsource/barlow-condensed/700.css';
+import 'galmuri/dist/galmuri.css';
 import 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css';
 import './styles.css';
 

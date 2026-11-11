@@ -1,20 +1,21 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Navigate } from 'react-router-dom';
 import { Field } from '../components/form';
+import { Loading } from '../components/pixel';
 import { useSession } from '../lib/session';
 import { goToPortalLogin, supabase } from '../lib/supabase';
 
 /** /career/ — 로그인했으면 작업 공간(/me)으로, 안 했으면 포털 로그인으로 (공개 페이지는 /career/<slug>) */
 export const Home = () => {
   const { ready, session } = useSession();
-  if (!ready) return <div className="page-loading" aria-busy="true" />;
+  if (!ready) return <Loading label="커리어++ 여는 중…" full />;
   if (!session) return import.meta.env.DEV ? <DevLogin /> : <ToPortalLogin />;
   return <Navigate to="/me" replace />;
 };
 
 const ToPortalLogin = () => {
   useEffect(goToPortalLogin, []);
-  return <div className="page-loading" aria-busy="true" />;
+  return <Loading label="커리어++ 여는 중…" full />;
 };
 
 /** 개발 서버에는 포털이 없어서 같은 ae:p 계정으로 여기서 로그인한다 */

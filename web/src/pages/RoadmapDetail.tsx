@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Field, Modal, RowList, Toggle, WordsField } from '../components/form';
+import { Loading } from '../components/pixel';
 import { PageHead, useWorkspace } from '../components/Workspace';
 import { api, errorText } from '../lib/api';
 import {
@@ -38,7 +39,7 @@ export const RoadmapDetailPage = () => {
       </div>
     );
   }
-  if (!roadmap.data) return <div className="page-loading" aria-busy="true" />;
+  if (!roadmap.data) return <Loading label="로드맵을 불러오는 중…" />;
   return <RoadmapView key={roadmap.data.id} initial={roadmap.data} />;
 };
 
@@ -179,7 +180,10 @@ const RoadmapView = ({ initial }: { initial: RoadmapDetail }) => {
   const monthOf =
     today < d.starts_on ? `${stats.monthCount}개월 · 아직 시작 전` : today > d.ends_on ? `${stats.monthCount}개월 · 끝남` : `${stats.monthCount}개월 중 ${stats.monthIndex}개월째`;
 
+  // 지금 해야 할 첫 퀘스트: 끝나지 않은 할 일 중 달 · 순서가 가장 빠른 것
+  const nowId = [...d.items].filter((it) => !isDone(it)).sort((a, b) => a.month.localeCompare(b.month) || a.sort_order - b.sort_order)[0]?.id;
   const itemProps = {
+    nowId,
     categories: d.categories,
     cur,
     onToggle: toggleItem,
@@ -439,6 +443,8 @@ const Bar = ({ label, value, muted }: { label: string; value: number; muted?: bo
 // ── 달 묶음 · 항목 ───────────────────────────
 
 interface ItemHandlers {
+  /** 지금 해야 할 첫 퀘스트의 id */
+  nowId?: string | number | undefined;
   categories: string[];
   cur: string;
   onToggle: (it: RoadmapItem) => void;
@@ -481,7 +487,7 @@ const MonthGroups = ({ items, visible, ...h }: ItemHandlers & { items: RoadmapIt
   );
 };
 
-const ItemRow = ({ item: it, categories, cur, onToggle, onDelete, onEdit }: ItemHandlers & { item: RoadmapItem }) => {
+const ItemRow = ({ item: it, nowId, categories, cur, onToggle, onDelete, onEdit }: ItemHandlers & { item: RoadmapItem }) => {
   const [confirming, setConfirming] = useState(false);
   useEffect(() => {
     if (!confirming) return;
@@ -491,7 +497,7 @@ const ItemRow = ({ item: it, categories, cur, onToggle, onDelete, onEdit }: Item
   const done = isDone(it);
   const tone = categoryTone(categories, it.category);
   return (
-    <li className={`item ${done ? 'is-done' : ''} ${isOverdue(it, cur) ? 'is-over' : ''}`}>
+    <li className={`item ${done ? 'is-done' : ''} ${isOverdue(it, cur) ? 'is-over' : ''} ${it.id === nowId ? 'is-now' : ''}`}>
       <label>
         <input type="checkbox" checked={done} onChange={() => onToggle(it)} />
         <span className="item-text">
@@ -505,6 +511,7 @@ const ItemRow = ({ item: it, categories, cur, onToggle, onDelete, onEdit }: Item
               ★
             </span>
           )}
+          {it.id === nowId && <span className="now-tag">NOW<span className="sr-only"> 지금 할 일</span></span>}
           <span className="item-body">{it.body}</span>
           {done && <span className="item-when num">{shortDay(it.done_on)} 완료</span>}
         </span>

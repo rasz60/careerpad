@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { Link, Outlet, useOutletContext, useParams } from 'react-router-dom';
+import { Loading } from './pixel';
 import { api, ApiError, errorText } from '../lib/api';
 import { phoneLabel } from '../lib/format';
 import { useSession } from '../lib/session';
@@ -39,7 +40,7 @@ export const Layout = () => {
     document.title = profile ? `${profile.name || profile.slug} — 커리어++` : '커리어++';
   }, [profile]);
 
-  if (!ready || (page.loading && !page.data)) return <div className="page-loading" aria-busy="true" />;
+  if (!ready || (page.loading && !page.data)) return <Loading label="이력서를 불러오는 중…" full />;
   if (page.error || !page.data) {
     const missing = page.error instanceof ApiError && page.error.status === 404;
     return (

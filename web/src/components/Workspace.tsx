@@ -1,26 +1,29 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Navigate, NavLink, Outlet, useLocation, useOutletContext } from 'react-router-dom';
+import { Link, Navigate, NavLink, Outlet, useLocation, useOutletContext } from 'react-router-dom';
 import { api, errorText } from '../lib/api';
 import { daysUntil } from '../lib/format';
 import { useSession } from '../lib/session';
 import { roadmapStatus, seoulToday } from '../lib/roadmap';
 import type { Message, PublicPage, RoadmapSummary } from '../lib/types';
 import { useAsync, type AsyncState } from '../lib/useAsync';
+import { placeHint } from '../lib/place';
 import { useSwitcher, type PageContext } from './Layout';
+import { Hero, Loading, WorldMap, type MapNode } from './pixel';
 
-/** 메뉴마다 색이 하나씩 (바인더 인덱스 탭). 화면 안의 주 버튼 · 강조도 그 색을 쓴다 */
+/** 메뉴마다 색이 하나씩 (월드맵의 장소 · 도트 탭의 표시). 화면 안의 강조도 그 색을 쓴다 */
 export type Tone = 'slate' | 'sage' | 'mustard' | 'peri' | 'teal' | 'rose';
 
 /** 공용 테스터 계정(P-0004)에게 숨기는 탭 (서버도 403 으로 막는다) */
 const TESTER_HIDDEN = new Set(['/me/jobs', '/me/inbox']);
 
-const TABS: { to: string; label: string; tone: Tone }[] = [
-  { to: '/me', label: '오늘', tone: 'slate' },
-  { to: '/me/roadmap', label: '로드맵', tone: 'rose' },
-  { to: '/me/jobs', label: '채용공고', tone: 'sage' },
-  { to: '/me/certs', label: '자격증', tone: 'mustard' },
-  { to: '/me/resume', label: '이력서', tone: 'peri' },
-  { to: '/me/inbox', label: '메시지', tone: 'teal' },
+/** x · y 는 월드맵 위 장소의 자리(%) */
+const TABS: { to: string; label: string; tone: Tone; x: number; y: number }[] = [
+  { to: '/me', label: '오늘', tone: 'slate', x: 14, y: 40 },
+  { to: '/me/roadmap', label: '로드맵', tone: 'rose', x: 52, y: 25 },
+  { to: '/me/jobs', label: '채용공고', tone: 'sage', x: 48, y: 66 },
+  { to: '/me/certs', label: '자격증', tone: 'mustard', x: 74, y: 25 },
+  { to: '/me/resume', label: '이력서', tone: 'peri', x: 28, y: 62 },
+  { to: '/me/inbox', label: '메시지', tone: 'teal', x: 72, y: 52 },
 ];
 
 export interface WorkspaceContext extends PageContext {
@@ -42,7 +45,7 @@ const loadMine = async (onTester: (isTester: boolean) => void): Promise<PublicPa
   return api.publicPage(me.slug);
 };
 
-/** /me — 나만 쓰는 작업 공간. 왼쪽(좁은 화면은 위쪽) 인덱스 탭 + 흰 종이 한 장 */
+/** /me — 나만 쓰는 작업 공간. 홈(오늘)은 월드맵, 모든 화면 위쪽에 도트 탭 + 종이 창 한 장 */
 export const Workspace = () => {
   const { ready, session } = useSession();
   const { pathname } = useLocation();
@@ -57,7 +60,12 @@ export const Workspace = () => {
     document.title = `${tab.label} — 커리어++`;
   }, [tab.label]);
 
-  if (!ready) return <div className="page-loading" aria-busy="true" />;
+  // 좁은 화면의 가로 탭에서 지금 메뉴가 보이게
+  useEffect(() => {
+    document.querySelector('.tab.active')?.scrollIntoView({ block: 'nearest', inline: 'center' });
+  }, [tab.to, ready, page.data]);
+
+  if (!ready) return <Loading label="커리어++ 여는 중…" full />;
   if (!session) return <Navigate to="/" replace />;
 
   const unread = (messages.data ?? []).filter((m) => !m.is_read).length;
@@ -78,18 +86,49 @@ export const Workspace = () => {
     '/me/inbox': unread > 0 && unread,
   };
 
+  const visible = TABS.filter((t) => !(isTester && TESTER_HIDDEN.has(t.to)));
+  const nodes: MapNode[] = visible.map((t) => ({
+    to: t.to,
+    label: t.label,
+    x: t.x,
+    y: t.y,
+    note: notes[t.to] || undefined,
+    ...(t.to === '/me/roadmap' && overdue > 0 ? { noteLabel: `기한 지난 할 일 ${overdue}개` } : {}),
+  }));
+  const hint = placeHint({ here: tab.label, nextExam, overdue, unread, isTester });
+  const atHome = pathname === '/me';
+
   return (
     <div className="desk" data-tone={tab.tone}>
       <header className="desk-head no-print">
         <aep-switcher mode="inline" className="switcher" />
         <span className="desk-brand">커리어++</span>
         {page.data && <span className="desk-owner">{page.data.profile.name || page.data.profile.slug}</span>}
+        <span className="grow" />
+        <span className="desk-place" aria-hidden="true">
+          <Hero />
+        </span>
       </header>
+      {atHome && (
+        <section className="world no-print" aria-label="월드맵">
+          <WorldMap nodes={nodes} current={tab.to} />
+          <div className="dlg" role="status">
+            <b>현재 위치</b>
+            {hint.text}
+            {hint.next && (
+              <>
+                {' '}
+                다음 목적지는 <Link to={hint.next.to}>{hint.next.label}</Link>이에요.
+              </>
+            )}
+          </div>
+        </section>
+      )}
       <div className="binder">
         <nav className="tabs no-print" aria-label="메뉴">
-          {TABS.filter((t) => !(isTester && TESTER_HIDDEN.has(t.to))).map((t) => (
+          {visible.map((t) => (
             <NavLink key={t.to} to={t.to} end={t.to === '/me'} className="tab" data-tone={t.tone}>
-              <span>{t.label}</span>
+              <span className="tab-label">{t.label}</span>
               {notes[t.to] && <span className="tab-note">{notes[t.to]}</span>}
             </NavLink>
           ))}
@@ -117,7 +156,7 @@ export const Workspace = () => {
               }
             />
           ) : (
-            <div className="page-loading" aria-busy="true" />
+            <Loading label="내 공간을 불러오는 중…" />
           )}
         </main>
       </div>
@@ -139,7 +178,7 @@ interface PageHeadProps {
   children?: ReactNode;
 }
 
-/** 종이 맨 위: 제목(형광펜) · 한 줄 설명 · 오른쪽 도구 */
+/** 종이 창 맨 위: 제목 · 한 줄 설명 · 오른쪽 도구 */
 export const PageHead = ({ title, sub, children }: PageHeadProps) => (
   <header className="page-head">
     <div>

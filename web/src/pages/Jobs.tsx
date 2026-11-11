@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Field, Modal, WordsField } from '../components/form';
+import { Loading } from '../components/pixel';
 import { PageHead, TesterBlocked, useWorkspace } from '../components/Workspace';
 import { api, errorText } from '../lib/api';
 import { deadlineLabel } from '../lib/format';
@@ -185,7 +186,7 @@ const Results = ({ search, onEdit }: ResultsProps) => {
         </div>
       )}
 
-      {results.loading && !results.data && <div className="skeleton" aria-busy="true" />}
+      {results.loading && !results.data && <Loading label="공고를 모으는 중…" />}
 
       {view === 'merged' && results.data ? (
         <MergedList results={data.filter((r) => !hidden.has(r.site.id))} />

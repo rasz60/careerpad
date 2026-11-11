@@ -1,5 +1,6 @@
-import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { splitWords } from '../lib/format';
+import { useDialog } from '../lib/useDialog';
 
 interface FieldProps {
   label: string;
@@ -126,15 +127,8 @@ export const Modal = ({ title, onClose, onSubmit, submitLabel = '저장', extra,
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !busy && onClose();
-    window.addEventListener('keydown', onKey);
-    document.body.classList.add('no-scroll');
-    return () => {
-      window.removeEventListener('keydown', onKey);
-      document.body.classList.remove('no-scroll');
-    };
-  }, [busy, onClose]);
+  const dialogRef = useRef<HTMLFormElement>(null);
+  useDialog(dialogRef, onClose, busy);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -151,7 +145,7 @@ export const Modal = ({ title, onClose, onSubmit, submitLabel = '저장', extra,
 
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()}>
-      <form className="modal" role="dialog" aria-modal="true" aria-label={title} onSubmit={submit}>
+      <form ref={dialogRef} className="modal" role="dialog" aria-modal="true" aria-label={title} tabIndex={-1} onSubmit={submit}>
         <header className="modal-head">
           <h2>{title}</h2>
           <button type="button" className="icon-btn" onClick={onClose} disabled={busy} aria-label="닫기">

@@ -1,7 +1,9 @@
 import { useEffect, useId, useRef, useState, type DragEvent, type ReactNode } from 'react';
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { PageHead, useWorkspace } from '../components/Workspace';
+import { Loading } from '../components/pixel';
 import { api, errorText } from '../lib/api';
+import { useDialog } from '../lib/useDialog';
 import { dotDate, monthsBetween, pct, roadmapStatus, seoulToday, STATUS_LABEL, type RoadmapStatus } from '../lib/roadmap';
 import { convertPrompt, newRoadmapPrompt, type NewRoadmapAnswers } from '../lib/roadmapPrompt';
 import type { RoadmapDraft, RoadmapSummary } from '../lib/types';
@@ -48,7 +50,7 @@ export const RoadmapList = () => {
           </button>
         </div>
       ) : null}
-      {roadmaps.loading && !roadmaps.data && <div className="skeleton" aria-busy="true" />}
+      {roadmaps.loading && !roadmaps.data && <Loading label="로드맵을 불러오는 중…" />}
 
       {roadmaps.data && list.length === 0 && (
         <div className="roadmap-empty">
@@ -126,15 +128,8 @@ const CreateRoadmap = ({ onClose }: { onClose: () => void }) => {
   const [error, setError] = useState('');
   const md = useMarkdownPreview();
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !busy && onClose();
-    window.addEventListener('keydown', onKey);
-    document.body.classList.add('no-scroll');
-    return () => {
-      window.removeEventListener('keydown', onKey);
-      document.body.classList.remove('no-scroll');
-    };
-  }, [busy, onClose]);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialog(dialogRef, onClose, busy);
 
   const save = async () => {
     setBusy(true);
@@ -153,7 +148,7 @@ const CreateRoadmap = ({ onClose }: { onClose: () => void }) => {
 
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()}>
-      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="roadmap-create-title">
+      <div ref={dialogRef} className="modal" role="dialog" aria-modal="true" aria-labelledby="roadmap-create-title" tabIndex={-1}>
         <header className="modal-head">
           <h2 id="roadmap-create-title">로드맵 만들기</h2>
           <button type="button" className="icon-btn" onClick={onClose} disabled={busy} aria-label="닫기">
