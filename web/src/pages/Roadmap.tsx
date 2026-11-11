@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type DragEvent, type ReactNode } from 'react';
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
+import { Icon, useDialog } from '../components/form';
 import { PageHead, useWorkspace } from '../components/Workspace';
 import { api, errorText } from '../lib/api';
 import { dotDate, monthsBetween, pct, roadmapStatus, seoulToday, STATUS_LABEL, type RoadmapStatus } from '../lib/roadmap';
@@ -126,15 +127,8 @@ const CreateRoadmap = ({ onClose }: { onClose: () => void }) => {
   const [error, setError] = useState('');
   const md = useMarkdownPreview();
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !busy && onClose();
-    window.addEventListener('keydown', onKey);
-    document.body.classList.add('no-scroll');
-    return () => {
-      window.removeEventListener('keydown', onKey);
-      document.body.classList.remove('no-scroll');
-    };
-  }, [busy, onClose]);
+  const box = useRef<HTMLDivElement>(null);
+  const { close, closing, onBackdropMouseDown } = useDialog(box, onClose, busy);
 
   const save = async () => {
     setBusy(true);
@@ -152,12 +146,12 @@ const CreateRoadmap = ({ onClose }: { onClose: () => void }) => {
   const canSave = !!md.draft && md.draft.errors.length === 0 && !md.loading && !busy;
 
   return (
-    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()}>
-      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="roadmap-create-title">
+    <div className="modal-backdrop" data-closing={closing || undefined} onMouseDown={onBackdropMouseDown}>
+      <div ref={box} className="modal" role="dialog" aria-modal="true" aria-labelledby="roadmap-create-title" tabIndex={-1}>
         <header className="modal-head">
           <h2 id="roadmap-create-title">로드맵 만들기</h2>
-          <button type="button" className="icon-btn" onClick={onClose} disabled={busy} aria-label="닫기">
-            ✕
+          <button type="button" className="icon-btn" onClick={close} disabled={busy} aria-label="닫기">
+            <Icon name="close" />
           </button>
         </header>
         <div className="modal-body">
@@ -171,11 +165,15 @@ const CreateRoadmap = ({ onClose }: { onClose: () => void }) => {
           </div>
           {tab === 'md' ? <MarkdownPane md={md} /> : <PromptPane onUseMarkdown={() => setTab('md')} />}
         </div>
-        {error && <p className="error">{error}</p>}
+        {error && (
+          <p className="error" role="alert">
+            {error}
+          </p>
+        )}
         {tab === 'md' && (
           <footer className="modal-foot">
             <span className={`grow small-note ${md.draft?.errors.length ? 'is-error' : ''}`}>{footNote(md.draft)}</span>
-            <button type="button" className="btn ghost" onClick={onClose} disabled={busy}>
+            <button type="button" className="btn ghost" onClick={close} disabled={busy}>
               취소
             </button>
             <button type="button" className="btn primary" onClick={() => void save()} disabled={!canSave}>
