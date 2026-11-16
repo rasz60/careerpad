@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 
 /** 도트 그림. 글자 한 칸이 한 픽셀이고 '.' 는 투명 */
@@ -53,22 +53,64 @@ export const HERO_PAL: Palette = { k: INK, d: '#6b4a2b', s: '#f1c9a0', a: '#d94a
 
 export const Hero = ({ className = '' }: { className?: string }) => <Pix rows={HERO} pal={HERO_PAL} className={className} />;
 
-/** 타일맵: w 바다, g 풀, t 숲, m 산, p 길, s 모래 */
-const MAP: Bitmap = [
-  'wwwwwwwwwwwwwwwwwwww',
-  'wwggggwwwwwwmmwwwwww',
-  'wgggggggwwwmmmmwwwww',
-  'wgggtgggppppmmgwwwww',
-  'wggtttgpgggggggggwww',
-  'wwgggggpgggtttggwwww',
-  'wwwgggppggtttgggwwww',
-  'wwwwgpgggggggggwwwww',
-  'wwwwgpggssssgwwwwwww',
-  'wwwwwpppssswwwwwwwww',
-  'wwwwwwwwwwwwwwwwwwww',
-  'wwwwwwwwwwwwwwwwwwww',
-];
-const MAP_PAL: Palette = { w: '#5c8fb0', g: '#8fb36a', t: '#4f7a45', m: '#8a8279', p: '#d9c48a', s: '#ead9a6' };
+/** 타일맵 (50x30): w 바다, v 물결, a 모래, g 풀, h 짙은 풀, t 숲, u 짙은 숲, m 산, n 산봉우리, p 길 */
+const MAP_W = 50;
+const MAP_H = 30;
+const MAP_PAL: Palette = {
+  w: '#7f9fb3', v: '#8aaabd', a: '#d8cda6', g: '#9db484', h: '#93ab7b',
+  t: '#6f8d62', u: '#617f56', m: '#8d8b86', n: '#b3b1aa', p: '#d9ca9b',
+};
+
+/** 섬 모양: 타원에 완만한 굴곡을 준 값. 1 이하면 땅, 0.91 초과면 해변 */
+/** 좌표마다 같은 값이 나오는 잔무늬용 해시 (무작위가 아니라 새로 그려도 모양이 같다) */
+const hash = (x: number, y: number): number => Math.abs(Math.imul(x + 11, 73856093) ^ Math.imul(y + 7, 19349663)) >>> 3;
+
+const islandDist = (x: number, y: number): number => {
+  const dx = (x + 0.5 - 25) / 22;
+  const dy = (y + 0.5 - 15.5) / 12;
+  const a = Math.atan2(dy, dx);
+  return Math.hypot(dx, dy) / (1 + 0.07 * Math.sin(a * 3 + 1) + 0.04 * Math.sin(a * 5 + 2));
+};
+
+/** 숲 · 산 덩어리 [중심 x, 중심 y, 반지름] */
+const FORESTS: readonly [number, number, number][] = [[5, 16, 2.6], [32, 23, 2.8], [19, 11, 2.2], [43, 20, 2.2]];
+const PEAKS: readonly [number, number, number][] = [[41, 12.5, 2.8], [18, 5.5, 2.2]];
+const inBlob = (blobs: readonly [number, number, number][], x: number, y: number) =>
+  blobs.find(([cx, cy, r]) => Math.hypot((x - cx) * 1.1, (y - cy) * 1.3) <= r);
+
+/** 메뉴 위치(%)를 타일 좌표로 바꿔, 첫 장소에서 나머지로 ㄱ자 길을 낸다. 장소 자리는 3칸 광장 */
+export const buildMap = (points: readonly { x: number; y: number }[]): Bitmap => {
+  const g: string[][] = [];
+  for (let y = 0; y < MAP_H; y += 1) {
+    const row: string[] = [];
+    for (let x = 0; x < MAP_W; x += 1) {
+      const d = islandDist(x, y);
+      let c: string;
+      if (d > 1) c = hash(x, y) % 23 === 0 ? 'v' : 'w';
+      else if (d > 0.92) c = 'a';
+      else if (inBlob(PEAKS, x, y)) {
+        const [cx, cy, r] = inBlob(PEAKS, x, y)!;
+        c = y <= cy - r / 3 && Math.abs(x - cx) <= 1 ? 'n' : 'm';
+      } else if (inBlob(FORESTS, x, y)) c = hash(x, y) % 3 === 0 ? 'u' : 't';
+      else c = hash(x, y) % 6 === 0 ? 'h' : 'g';
+      row.push(c);
+    }
+    g.push(row);
+  }
+  const tiles = points.map((p) => ({ x: Math.round((p.x / 100) * MAP_W - 0.5), y: Math.round((p.y / 100) * MAP_H - 0.5) }));
+  const put = (x: number, y: number) => {
+    if (x >= 0 && x < MAP_W && y >= 0 && y < MAP_H) g[y]![x] = 'p';
+  };
+  const home = tiles[0];
+  if (home) {
+    for (const t of tiles.slice(1)) {
+      for (let x = Math.min(home.x, t.x); x <= Math.max(home.x, t.x); x += 1) put(x, home.y);
+      for (let y = Math.min(home.y, t.y); y <= Math.max(home.y, t.y); y += 1) put(t.x, y);
+    }
+  }
+  for (const t of tiles) for (let dx = -1; dx <= 1; dx += 1) put(t.x + dx, t.y);
+  return g.map((r) => r.join(''));
+};
 
 export interface MapNode {
   to: string;
@@ -81,12 +123,14 @@ export interface MapNode {
   noteLabel?: string;
 }
 
-/** 월드맵: 메뉴가 장소다. 지금 있는 곳은 빨간 점이 깜빡이고 캐릭터가 선다 */
+/** 월드맵: 메뉴가 장소다. 장소 사이는 길로 이어지고, 지금 있는 곳은 빨간 점이 깜빡이며 캐릭터가 선다 */
 export const WorldMap = ({ nodes, current }: { nodes: MapNode[]; current: string }) => {
   const cur = nodes.find((n) => n.to === current);
+  const key = nodes.map((n) => `${n.x},${n.y}`).join('|');
+  const rows = useMemo(() => buildMap(nodes), [key]); // 위치가 같으면 다시 그리지 않는다
   return (
     <nav className="map" aria-label="메뉴 지도">
-      <Pix rows={MAP} pal={MAP_PAL} />
+      <Pix rows={rows} pal={MAP_PAL} />
       {nodes.map((n) => (
         <Link
           key={n.to}
