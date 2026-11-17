@@ -37,3 +37,22 @@ export const placeHint = (f: PlaceFacts): PlaceHint => {
   if (facts.length === 0) return { text: `${f.here}에 있어요. 가고 싶은 곳을 골라 보세요.` };
   return { text: `${f.here}에 있어요. ${facts.join(' ')}`, next };
 };
+
+export interface TipFacts {
+  /** 캐릭터가 서 있는 장소 이름 (장소 밖이면 없음) */
+  place?: string | undefined;
+  /** 그 장소가 지금 보고 있는 화면인지 */
+  isCurrent?: boolean | undefined;
+  /** 걸어가는 중인 장소 이름 */
+  going?: string | undefined;
+  /** X 팻말을 들고 있는 중 */
+  sign: boolean;
+}
+
+/** 월드맵 조작 안내 한 줄 (걷는 중 · 팻말 · 장소 위 · 일반) */
+export const placeTip = (f: TipFacts): string => {
+  if (f.going) return `${f.going}(으)로 걸어가는 중이에요…`;
+  if (f.sign) return '여기는 들어갈 수 있는 곳이 아니에요. 이름표가 있는 장소에서 스페이스를 눌러 보세요.';
+  if (f.place) return f.isCurrent ? `${f.place}에 서 있어요. 지금 보고 있는 화면이에요.` : `${f.place}에 도착했어요. 스페이스를 누르면 들어가요.`;
+  return '방향키로 걷다가 장소에서 스페이스를 누르면 들어가요.';
+};

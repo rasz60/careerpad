@@ -1,5 +1,7 @@
-import { useMemo, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
+import { findPath, MAP_H, MAP_W, onPlaza, percentOf, stepTile, tileOf, type Dir, type Tile } from '../lib/worldwalk';
+import { placeTip } from '../lib/place';
 
 /** 도트 그림. 글자 한 칸이 한 픽셀이고 '.' 는 투명 */
 export type Bitmap = readonly string[];
@@ -54,8 +56,6 @@ export const HERO_PAL: Palette = { k: INK, d: '#6b4a2b', s: '#f1c9a0', a: '#d94a
 export const Hero = ({ className = '' }: { className?: string }) => <Pix rows={HERO} pal={HERO_PAL} className={className} />;
 
 /** 타일맵 (50x30): w 바다, v 물결, a 모래, g 풀, h 짙은 풀, t 숲, u 짙은 숲, m 산, n 산봉우리, p 길 */
-const MAP_W = 50;
-const MAP_H = 30;
 const MAP_PAL: Palette = {
   w: '#7f9fb3', v: '#8aaabd', a: '#d8cda6', g: '#9db484', h: '#93ab7b',
   t: '#6f8d62', u: '#617f56', m: '#8d8b86', n: '#b3b1aa', p: '#d9ca9b',
@@ -97,7 +97,7 @@ export const buildMap = (points: readonly { x: number; y: number }[]): Bitmap =>
     }
     g.push(row);
   }
-  const tiles = points.map((p) => ({ x: Math.round((p.x / 100) * MAP_W - 0.5), y: Math.round((p.y / 100) * MAP_H - 0.5) }));
+  const tiles = points.map(tileOf);
   const put = (x: number, y: number) => {
     if (x >= 0 && x < MAP_W && y >= 0 && y < MAP_H) g[y]![x] = 'p';
   };
@@ -123,39 +123,278 @@ export interface MapNode {
   noteLabel?: string;
 }
 
-/** 월드맵: 메뉴가 장소다. 장소 사이는 길로 이어지고, 지금 있는 곳은 빨간 점이 깜빡이며 캐릭터가 선다 */
-export const WorldMap = ({ nodes, current }: { nodes: MapNode[]; current: string }) => {
-  const cur = nodes.find((n) => n.to === current);
+/** 'X' 가 적힌 팻말 (들어갈 수 없는 곳에서 스페이스를 눌렀을 때 캐릭터가 든다) */
+export const SIGN_X: Bitmap = [
+  'kkkkkkkkk',
+  'kwwwwwwwk',
+  'kwrwwwrwk',
+  'kwwrwrwwk',
+  'kwwwrwwwk',
+  'kwwrwrwwk',
+  'kwrwwwrwk',
+  'kwwwwwwwk',
+  'kkkkkkkkk',
+  '...kdk...',
+  '...kdk...',
+];
+const SIGN_PAL: Palette = { k: INK, w: '#f3efe0', r: '#d94a4a', d: '#6b4a2b' };
+
+const WALK_MS = 100; // 한 칸 걷는 시간
+const ARRIVE_MS = 200; // 도착하고 화면이 바뀌기 전 잠깐 멈춤
+const SIGN_MS = 1200; // X 팻말을 들고 있는 시간
+const REPEAT_DELAY_MS = 300; // 방향 버튼을 길게 누를 때 연속 이동이 시작되기까지
+const REPEAT_MS = 110;
+
+const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const ARROWS: { dir: Dir; mark: string; label: string }[] = [
+  { dir: 'up', mark: '▲', label: '위로' },
+  { dir: 'left', mark: '◀', label: '왼쪽으로' },
+  { dir: 'right', mark: '▶', label: '오른쪽으로' },
+  { dir: 'down', mark: '▼', label: '아래로' },
+];
+const KEY_DIR: Record<string, Dir> = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
+
+/** 월드맵: 메뉴가 장소다. 장소를 누르면 캐릭터가 길을 따라 걸어간 뒤 화면이 바뀐다.
+ *  우측 상단 방향 패드(또는 지도에 포커스를 둔 방향키)로 직접 걷고, 장소에서 입장(스페이스)을 누르면 들어간다.
+ *  장소가 아닌 곳에서 입장을 누르면 캐릭터가 X 팻말을 든다. 그림 아래의 안내창(.dlg)도 여기서 같이 그린다 */
+export const WorldMap = ({
+  nodes,
+  current,
+  hint,
+  onGo,
+}: {
+  nodes: MapNode[];
+  current: string;
+  /** 안내창에 보여 줄 상태 안내 */
+  hint: ReactNode;
+  /** 걷기를 마치고 들어갈 메뉴 경로 */
+  onGo: (to: string) => void;
+}) => {
   const key = nodes.map((n) => `${n.x},${n.y}`).join('|');
   const rows = useMemo(() => buildMap(nodes), [key]); // 위치가 같으면 다시 그리지 않는다
+  const places = useMemo(() => nodes.map((n) => ({ node: n, tile: tileOf(n) })), [key]);
+  const cur = places.find((p) => p.node.to === current) ?? places[0];
+
+  const [pos, setPos] = useState<Tile>(() => cur?.tile ?? { x: 0, y: 0 });
+  const [going, setGoing] = useState<MapNode | null>(null);
+  const [sign, setSign] = useState(false);
+  // 좁은 화면에서는 패드가 장소를 가리지 않게 접어 두고 시작한다
+  const [padOpen, setPadOpen] = useState(() => typeof window === 'undefined' || window.innerWidth > 820);
+  const posRef = useRef(pos);
+  const walkTimer = useRef<number | undefined>(undefined);
+  const signTimer = useRef<number | undefined>(undefined);
+  const repeatTimer = useRef<number | undefined>(undefined);
+  const repeatDelay = useRef<number | undefined>(undefined);
+  const goingRef = useRef(false);
+  const mapRef = useRef<HTMLElement>(null);
+  const latest = useRef({ rows, places, current, onGo });
+  latest.current = { rows, places, current, onGo };
+
+  const place = (t: Tile) => places.find((p) => onPlaza(p.tile, t));
+  const here = place(pos);
+
+  const put = useCallback((t: Tile) => {
+    posRef.current = t;
+    setPos(t);
+  }, []);
+
+  const stopWalk = useCallback(() => {
+    window.clearTimeout(walkTimer.current);
+    goingRef.current = false;
+    setGoing(null);
+  }, []);
+
+  const stopRepeat = useCallback(() => {
+    window.clearTimeout(repeatDelay.current);
+    window.clearInterval(repeatTimer.current);
+  }, []);
+
+  useEffect(
+    () => () => {
+      window.clearTimeout(walkTimer.current);
+      window.clearTimeout(signTimer.current);
+      window.clearTimeout(repeatDelay.current);
+      window.clearInterval(repeatTimer.current);
+    },
+    [],
+  );
+
+  /** 장소를 향해 걷는다. 걷는 중에 다시 부르면 새 목적지로 바꾼다 */
+  const walkTo = useCallback(
+    (node: MapNode, tile: Tile) => {
+      const { rows: map, onGo: go } = latest.current;
+      window.clearTimeout(walkTimer.current);
+      window.clearTimeout(signTimer.current);
+      setSign(false);
+      if (reducedMotion()) {
+        put(tile);
+        go(node.to);
+        return;
+      }
+      const path = findPath(map, posRef.current, tile);
+      goingRef.current = true;
+      setGoing(node);
+      const tick = (i: number) => {
+        const next = path[i];
+        if (!next) {
+          walkTimer.current = window.setTimeout(() => go(node.to), ARRIVE_MS);
+          return;
+        }
+        put(next);
+        walkTimer.current = window.setTimeout(() => tick(i + 1), WALK_MS);
+      };
+      tick(0);
+    },
+    [put],
+  );
+
+  const move = useCallback(
+    (dir: Dir) => {
+      stopWalk();
+      window.clearTimeout(signTimer.current);
+      setSign(false);
+      put(stepTile(latest.current.rows, posRef.current, dir));
+    },
+    [put, stopWalk],
+  );
+
+  /** 입장(스페이스): 장소 위면 들어가고, 아니면 X 팻말 */
+  const enter = useCallback(() => {
+    if (goingRef.current) return;
+    const { places: all, onGo: go, current: cu } = latest.current;
+    const at = all.find((p) => onPlaza(p.tile, posRef.current));
+    if (at) {
+      if (at.node.to !== cu) go(at.node.to);
+      return;
+    }
+    setSign(true);
+    window.clearTimeout(signTimer.current);
+    signTimer.current = window.setTimeout(() => setSign(false), SIGN_MS);
+  }, []);
+
+  const onLink = (e: MouseEvent<HTMLAnchorElement>, n: MapNode, tile: Tile) => {
+    // 새 탭 · 새 창으로 여는 클릭은 링크 그대로 둔다
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    // 이미 이 장소(현재 화면) 위에 서 있으면 걸을 일이 없다. 다른 곳에 있다면 돌아간다
+    if (n.to === current && !goingRef.current && onPlaza(tile, posRef.current)) return;
+    walkTo(n, tile);
+  };
+
+  const onKey = (e: KeyboardEvent<HTMLElement>) => {
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
+    const dir = KEY_DIR[e.key];
+    if (dir) {
+      e.preventDefault();
+      move(dir);
+      return;
+    }
+    // 패드 버튼 위의 스페이스 · 엔터는 버튼 자체의 클릭으로 처리한다
+    if ((e.target as HTMLElement).closest('.dpad')) return;
+    if (e.key === ' ') {
+      e.preventDefault();
+      if (!e.repeat) enter();
+    }
+  };
+
+  const holdStart = (dir: Dir) => {
+    stopRepeat();
+    move(dir);
+    repeatDelay.current = window.setTimeout(() => {
+      repeatTimer.current = window.setInterval(() => move(dir), REPEAT_MS);
+    }, REPEAT_DELAY_MS);
+  };
+
+  const me = percentOf(pos);
   return (
-    <nav className="map" aria-label="메뉴 지도">
-      <Pix rows={rows} pal={MAP_PAL} />
-      {nodes.map((n) => (
-        <Link
-          key={n.to}
-          to={n.to}
-          className={`n${n.to === current ? ' cur' : ''}`}
-          style={{ left: `${n.x}%`, top: `${n.y}%` }}
-          aria-current={n.to === current ? 'page' : undefined}
-        >
-          <span>
-            {n.label}
-            {n.note ? (
-              <b className="n-note" aria-label={n.noteLabel}>
-                {n.note}
-              </b>
-            ) : null}
+    <>
+      <nav ref={mapRef} className="map" aria-label="메뉴 지도 (방향키로 걷고 스페이스로 입장)" tabIndex={0} onKeyDown={onKey}>
+        <Pix rows={rows} pal={MAP_PAL} />
+        {places.map(({ node: n, tile }) => (
+          <Link
+            key={n.to}
+            to={n.to}
+            className={`n${n.to === current ? ' cur' : ''}${here?.node.to === n.to ? ' here' : ''}`}
+            style={{ left: `${n.x}%`, top: `${n.y}%` }}
+            aria-current={n.to === current ? 'page' : undefined}
+            onClick={(e) => onLink(e, n, tile)}
+          >
+            <span>
+              {n.label}
+              {n.note ? (
+                <b className="n-note" aria-label={n.noteLabel}>
+                  {n.note}
+                </b>
+              ) : null}
+            </span>
+            <i />
+          </Link>
+        ))}
+        <span className={`me${going ? ' walking' : ''}`} style={{ left: `${me.left}%`, top: `${me.top}%` }} aria-hidden="true">
+          <span className="me-body">
+            <Hero />
           </span>
-          <i />
-        </Link>
-      ))}
-      {cur && (
-        <span className="me" style={{ left: `${cur.x}%`, top: `${Math.min(cur.y + 13, 92)}%` }} aria-hidden="true">
-          <Hero />
+          {sign && <Pix rows={SIGN_X} pal={SIGN_PAL} className="sign" />}
         </span>
-      )}
-    </nav>
+        <div className="dpad">
+          <button
+            type="button"
+            className="dpad-toggle"
+            aria-expanded={padOpen}
+            onClick={() => {
+              stopRepeat();
+              setPadOpen((v) => !v);
+            }}
+          >
+            방향 패드 {padOpen ? '접기' : '펴기'}
+          </button>
+          {padOpen && (
+            <div className="dpad-grid" role="group" aria-label="방향 패드">
+              {ARROWS.map((a) => (
+                <button
+                  key={a.dir}
+                  type="button"
+                  className={`dpad-btn dpad-${a.dir}`}
+                  aria-label={a.label}
+                  onPointerDown={(e) => {
+                    if (e.button !== 0) return;
+                    mapRef.current?.focus({ preventScroll: true }); // 키보드(방향키 · 스페이스)가 이어서 지도에서 동작하게
+                    holdStart(a.dir);
+                  }}
+                  onPointerUp={stopRepeat}
+                  onPointerCancel={stopRepeat}
+                  onPointerLeave={stopRepeat}
+                  onContextMenu={(e) => e.preventDefault()}
+                  onClick={(e) => {
+                    if (e.detail === 0) move(a.dir); // 키보드로 누른 경우 (마우스 · 터치는 pointerdown 에서 처리)
+                  }}
+                >
+                  <span aria-hidden="true">{a.mark}</span>
+                </button>
+              ))}
+              <button
+                type="button"
+                className="dpad-btn dpad-go"
+                aria-disabled={!here || undefined}
+                aria-label={here ? `${here.node.label} 입장 (스페이스)` : '입장 (스페이스)'}
+                onClick={(e) => {
+                  if (e.detail > 0) mapRef.current?.focus({ preventScroll: true });
+                  enter();
+                }}
+              >
+                입장
+              </button>
+            </div>
+          )}
+        </div>
+      </nav>
+      <div className="dlg" role="status">
+        <b>현재 위치</b>
+        {hint}
+        <p className="dlg-tip">{placeTip({ place: here?.node.label, isCurrent: here?.node.to === current, going: going?.label, sign })}</p>
+      </div>
+    </>
   );
 };
 

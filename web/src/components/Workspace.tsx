@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Link, Navigate, NavLink, Outlet, useLocation, useOutletContext } from 'react-router-dom';
+import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate, useOutletContext } from 'react-router-dom';
 import { api, errorText } from '../lib/api';
 import { daysUntil } from '../lib/format';
 import { useSession } from '../lib/session';
@@ -49,6 +49,7 @@ const loadMine = async (onTester: (isTester: boolean) => void): Promise<PublicPa
 export const Workspace = () => {
   const { ready, session } = useSession();
   const { pathname } = useLocation();
+  const navigate = useNavigate();
   const [isTester, setIsTester] = useState(false);
   const page = useAsync(() => (session ? loadMine(setIsTester) : Promise.reject(new Error('로그인이 필요해요'))), [session?.user.id]);
   const messages = useAsync(() => (session ? api.messages() : Promise.resolve([])), [session?.user.id]);
@@ -111,17 +112,22 @@ export const Workspace = () => {
       </header>
       {atHome && (
         <section className="world no-print" aria-label="월드맵">
-          <WorldMap nodes={nodes} current={tab.to} />
-          <div className="dlg" role="status">
-            <b>현재 위치</b>
-            {hint.text}
-            {hint.next && (
+          <WorldMap
+            nodes={nodes}
+            current={tab.to}
+            onGo={(to) => navigate(to)}
+            hint={
               <>
-                {' '}
-                다음 목적지는 <Link to={hint.next.to}>{hint.next.label}</Link>이에요.
+                {hint.text}
+                {hint.next && (
+                  <>
+                    {' '}
+                    다음 목적지는 <Link to={hint.next.to}>{hint.next.label}</Link>이에요.
+                  </>
+                )}
               </>
-            )}
-          </div>
+            }
+          />
         </section>
       )}
       <div className="binder">

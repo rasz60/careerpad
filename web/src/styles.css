@@ -203,7 +203,30 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .map .n:focus-visible { outline: 0; box-shadow: none; }
 .map .n:focus-visible span { outline: 3px solid #fff; outline-offset: 2px; box-shadow: 0 0 0 5px var(--map-ink); }
 .n-note { font: 700 11px/1 var(--head); background: var(--map-note); color: var(--map-ink); padding: 2px 4px; border-radius: 1px; }
-.map .me { position: absolute; width: 5%; transform: translate(-50%, -50%); pointer-events: none; animation: hop 1s steps(2) infinite; }
+/* 캐릭터: 타일 한 칸씩 left · top 이 바뀌고(걷는 시간과 같은 길이의 선형 이동), 몸통만 깡충거린다 */
+.map .me { position: absolute; z-index: 2; width: 5%; transform: translate(-50%, -15%); pointer-events: none; transition: left .1s linear, top .1s linear; }
+.me-body { display: block; animation: hop 1s steps(2) infinite; }
+.me.walking .me-body { animation-duration: .3s; }
+.map .me svg.sign { position: absolute; left: 50%; bottom: 88%; width: 80%; height: auto; transform: translateX(-50%); animation: sign-in .12s steps(3); }
+@keyframes sign-in { from { transform: translateX(-50%) translateY(6px); opacity: 0; } }
+.map .n.here span { outline: 2px solid var(--map-cream); outline-offset: 1px; }
+.map:focus-visible { outline: 3px solid var(--map-cream); outline-offset: -7px; box-shadow: none; }
+
+/* 방향 패드: 지도 우측 상단. 4방향 + 가운데 입장(스페이스) */
+.dpad { position: absolute; z-index: 3; top: 8px; right: 8px; display: grid; justify-items: end; gap: 6px; }
+.dpad-toggle, .dpad-btn {
+  min-height: 44px; border: 2px solid var(--map-ink); background: var(--map-cream); color: var(--map-ink); border-radius: 0;
+  box-shadow: 0 3px 0 var(--map-ink); font: 700 12px/1 var(--head); cursor: pointer; touch-action: manipulation; user-select: none; -webkit-user-select: none;
+  transition: transform .08s steps(2), box-shadow .08s steps(2);
+}
+.dpad-toggle { padding: 0 10px; opacity: .92; }
+.dpad-grid { display: grid; grid-template: repeat(3, 44px) / repeat(3, 44px); gap: 4px; padding: 6px; background: rgb(26 37 48 / 78%); border: 2px solid var(--map-ink); }
+.dpad-btn { min-width: 44px; padding: 0; font-size: 14px; }
+.dpad-up { grid-area: 1 / 2; } .dpad-left { grid-area: 2 / 1; } .dpad-go { grid-area: 2 / 2; } .dpad-right { grid-area: 2 / 3; } .dpad-down { grid-area: 3 / 2; }
+.dpad-toggle:active, .dpad-btn:active { transform: translateY(3px); box-shadow: none; }
+.dpad-btn[aria-disabled] { opacity: .6; }
+.dpad-toggle:focus-visible, .dpad-btn:focus-visible { outline: 3px solid #fff; outline-offset: 2px; box-shadow: 0 0 0 5px var(--map-ink); }
+.dlg-tip { margin: 10px 0 0; padding-top: 8px; border-top: 1px dotted var(--map-paper); font-size: 13px; color: var(--map-note); }
 .dlg { border: 2px solid var(--map-paper); background: #16222f; padding: 12px 14px; font: 14px/1.6 Galmuri14, var(--head); color: var(--map-paper); }
 .dlg b { display: block; font: 700 12px var(--head); color: var(--map-note); margin-bottom: 6px; }
 .dlg a { color: var(--map-note); font-weight: 700; text-underline-offset: 3px; }
